@@ -51,9 +51,7 @@ fun ChatView(
         }.contains(chatKey)
 
     val otherChats = chatInfo.observeAsState().value!!
-        .filter {
-            it.key != chatKey
-        }
+        .filter { it.key != chatKey }
 
     var message by rememberSaveable { mutableStateOf("") }
 
