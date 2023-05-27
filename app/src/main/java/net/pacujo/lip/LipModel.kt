@@ -136,19 +136,17 @@ class LipModel : ViewModel() {
 
     private fun join(name: String, limit: Int? = null): Chat? {
         val chatKey = name.toIRCLower()
-        val chat = chats[chatKey]
-        return if (chat != null)
-            chat
-        else if (limit != null && chats.size >= limit)
-            null
-        else
-            Chat(
-                name = name,
-                key = chatKey,
-            ).also {
-                chats[chatKey] = it
-                chatInfo.value = generateChatInfo()
-            }
+        return chats[chatKey]
+            ?: if (limit != null && chats.size >= limit)
+                null
+            else
+                Chat(
+                    name = name,
+                    key = chatKey,
+                ).also {
+                    chats[chatKey] = it
+                    chatInfo.value = generateChatInfo()
+                }
     }
 
     fun sendPrivMsg(text: String) {
