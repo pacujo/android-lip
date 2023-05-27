@@ -37,15 +37,24 @@ fun ChatView(
     configuration: LiveData<Configuration>,
     chatName: LiveData<String>,
     contents: LiveData<Array<ProcessedLine>>,
+    chatInfo: LiveData<Map<String, ChatInfo>>,
     onSend: (String) -> Unit,
     toggleAutojoin: () -> Unit,
     back: () -> Unit,
 ) {
     val obsChatName = chatName.observeAsState().value!!
+    val chatKey = obsChatName.toIRCLower()
+
     val favorite =
         configuration.observeAsState().value!!.autojoins.map {
             it.toIRCLower()
-        }.contains(obsChatName.toIRCLower())
+        }.contains(chatKey)
+
+    val otherChats = chatInfo.observeAsState().value!!
+        .filter {
+            it.key != chatKey
+        }
+
     var message by rememberSaveable { mutableStateOf("") }
 
     fun send() {
@@ -71,6 +80,7 @@ fun ChatView(
                     chatName = obsChatName,
                     favorite = favorite,
                     toggleFavorite = toggleAutojoin,
+                    chatInfo = otherChats,
                     back = back,
                 )
                      },
@@ -156,6 +166,20 @@ fun ChatViewPreview() {
                     mood = Mood.INFO,
                 ),
             ).toLogBuffer().getAll(),
+        ),
+        chatInfo = MutableLiveData(
+            mapOf(
+                "pacujo" to ChatInfo(
+                    name = "pacujo",
+                    totalCount = MutableLiveData(20L),
+                    seenCount = MutableLiveData(9L),
+                ),
+                "#testudo" to ChatInfo(
+                    name = "#testudo",
+                    totalCount = MutableLiveData(100L),
+                    seenCount = MutableLiveData(100L),
+                ),
+            )
         ),
         onSend = {},
         toggleAutojoin = {},

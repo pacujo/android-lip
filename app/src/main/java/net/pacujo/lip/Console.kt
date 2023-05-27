@@ -9,6 +9,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.LiveData
@@ -18,6 +19,7 @@ import java.time.Instant
 @Composable
 fun Console(
     contents: LiveData<Array<ProcessedLine>>,
+    chatInfo: LiveData<Map<String, ChatInfo>>,
     back: () -> Unit,
 ) {
     Surface(
@@ -27,6 +29,7 @@ fun Console(
             topBar = {
                 TopBar(
                     chatName = "Lip Console",
+                    chatInfo = chatInfo.observeAsState().value!!,
                     back = back,
                 )
                      },
@@ -84,6 +87,20 @@ fun ConsolePreview() {
                     mood = Mood.INFO,
                 ),
             ).toLogBuffer().getAll(),
+        ),
+        chatInfo = MutableLiveData(
+            mapOf(
+                "pacujo" to ChatInfo(
+                    name = "pacujo",
+                    totalCount = MutableLiveData(20L),
+                    seenCount = MutableLiveData(9L),
+                ),
+                "#testudo" to ChatInfo(
+                    name = "#testudo",
+                    totalCount = MutableLiveData(100L),
+                    seenCount = MutableLiveData(100L),
+                ),
+            )
         ),
         back = {},
     )

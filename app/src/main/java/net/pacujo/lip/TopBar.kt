@@ -9,6 +9,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -19,8 +21,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.MutableLiveData
+import kotlin.math.sign
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -28,8 +33,21 @@ fun TopBar(
     chatName: String,
     favorite: Boolean? = null,
     toggleFavorite: (() -> Unit)? = null,
+    chatInfo: Map<String, ChatInfo>,
     back: () -> Unit,
 ) {
+    val otherActiveChatCount = chatInfo.entries
+        .map {
+            with(it.value) {
+                (totalCount.observeAsState().value!! -
+                        seenCount.observeAsState().value!!).sign
+            }
+        }.sum()
+    val backBadgeObject = if (otherActiveChatCount > 0)
+        otherActiveChatCount
+    else
+        null
+
     BackHandler(onBack = back)
     TopAppBar(
         title = {
@@ -40,11 +58,7 @@ fun TopBar(
         },
         navigationIcon = {
             IconButton(onClick = back) {
-                Icon(
-                    imageVector = Icons.Default.ArrowBack,
-                    contentDescription = "Back",
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                )
+                BadgedBackArrow(badgeObject = backBadgeObject)
             }
         },
         actions = {
@@ -61,6 +75,32 @@ fun TopBar(
             containerColor = MaterialTheme.colorScheme.primary,
             titleContentColor = MaterialTheme.colorScheme.onPrimary,
         ),
+    )
+}
+
+@Composable
+fun BadgedBackArrow(badgeObject: Any?) {
+    if (badgeObject == null)
+        BackArrow()
+    else
+        BadgedBox(
+            badge = {
+                Badge {
+                    Text(badgeObject.toString())
+                }
+            },
+        ) {
+            BackArrow()
+        }
+}
+
+
+@Composable
+fun BackArrow() {
+    Icon(
+        imageVector = Icons.Default.ArrowBack,
+        contentDescription = "Back",
+        tint = MaterialTheme.colorScheme.onPrimary,
     )
 }
 
@@ -82,9 +122,21 @@ fun TopBarPreview() {
                     chatName = "#kapow",
                     favorite = true,
                     toggleFavorite = {},
+                    chatInfo = mapOf(
+                        "pacujo" to ChatInfo(
+                            name = "pacujo",
+                            totalCount = MutableLiveData(20L),
+                            seenCount = MutableLiveData(9L),
+                        ),
+                        "#testudo" to ChatInfo(
+                            name = "#testudo",
+                            totalCount = MutableLiveData(100L),
+                            seenCount = MutableLiveData(100L),
+                        ),
+                    ),
                     back = {},
                 )
-                     },
+            },
         ) {
             Text(
                 text = "sample",

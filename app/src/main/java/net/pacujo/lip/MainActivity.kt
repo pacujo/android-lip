@@ -69,6 +69,7 @@ fun Application(model: LipModel) {
         AppState.CONSOLE ->
             Console(
                 contents = model.consoleContents,
+                chatInfo = model.chatInfo,
                 back = model::leaveConsole,
             )
 
@@ -79,6 +80,7 @@ fun Application(model: LipModel) {
                 configuration = model.configuration,
                 chatName = model.currentChatKey,
                 contents = chat.contents,
+                chatInfo = model.chatInfo,
                 onSend = model::sendPrivMsg,
                 toggleAutojoin = chat::toggleAutojoin,
                 back = model::leaveChat,
