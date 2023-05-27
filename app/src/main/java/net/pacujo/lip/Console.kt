@@ -22,6 +22,9 @@ fun Console(
     chatInfo: LiveData<Map<String, ChatInfo>>,
     back: () -> Unit,
 ) {
+    val otherChats = chatInfo.observeAsState().value!!
+        .filter { it.key.isNotEmpty() }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
     ) {
@@ -29,7 +32,7 @@ fun Console(
             topBar = {
                 TopBar(
                     chatName = "Lip Console",
-                    chatInfo = chatInfo.observeAsState().value!!,
+                    chatInfo = otherChats,
                     back = back,
                 )
                      },

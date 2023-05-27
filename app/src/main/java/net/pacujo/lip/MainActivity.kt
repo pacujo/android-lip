@@ -59,8 +59,6 @@ fun Application(model: LipModel) {
 
         AppState.JOIN ->
             Join(
-                consoleTotal = model.consoleTotal,
-                consoleSeen = model.consoleSeen,
                 chatInfo = model.chatInfo,
                 onConsole = model::showConsole,
                 onJoin = { model.doJoin(it) },

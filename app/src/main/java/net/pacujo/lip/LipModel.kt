@@ -28,7 +28,7 @@ private const val ConfigBackupFileName = "$ConfigFileName.bak"
 private const val ConfigNewFileName = "$ConfigFileName.new"
 
 data class ChatInfo(
-    val name: String,
+    val name: String, // "" for the console
     val totalCount: LiveData<Long>,
     val seenCount: LiveData<Long>,
 )
@@ -43,8 +43,13 @@ class LipModel : ViewModel() {
 
     private val consoleLogBuffer = LogBuffer()
     val consoleContents = MutableLiveData(consoleLogBuffer.getAll())
-    val consoleTotal = MutableLiveData(0L)
-    val consoleSeen = MutableLiveData(0L)
+    private val consoleTotal = MutableLiveData(0L)
+    private val consoleSeen = MutableLiveData(0L)
+    private val consoleInfo = ChatInfo(
+        name = "",
+        totalCount = consoleTotal,
+        seenCount = consoleSeen,
+    )
 
     private val outputBridge = Channel<String>(capacity = 100)
 
@@ -59,12 +64,14 @@ class LipModel : ViewModel() {
         journal = LipJournal(File(filesDir, "journal"))
     }
 
-    private fun generateChatInfo() =
-        chats.entries.map { (key, chat) ->
-                key to with(chat) {
-                    ChatInfo(name, totalCount, seenCount)
-                }
-            }.toMap()
+    private fun generateChatInfo(): Map<String, ChatInfo> {
+        val result = mutableMapOf("" to consoleInfo)
+        for (chat in chats.values)
+            with(chat) {
+                result[key] = ChatInfo(name, totalCount, seenCount)
+            }
+        return result
+    }
 
     private fun loadConfiguration() {
         val configFile = File(filesDir, ConfigFileName)

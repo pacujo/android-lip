@@ -49,8 +49,6 @@ import androidx.lifecycle.MutableLiveData
 
 @Composable
 fun Join(
-    consoleTotal: LiveData<Long>,
-    consoleSeen: LiveData<Long>,
     chatInfo: LiveData<Map<String, ChatInfo>>,
     onConsole: () -> Unit,
     onJoin: (String) -> Unit,
@@ -111,8 +109,6 @@ fun Join(
                 }
                 if (chatInfo.value!!.isNotEmpty())
                     SingleClickJoin(
-                        consoleTotal = consoleTotal,
-                        consoleSeen = consoleSeen,
                         chatInfo = chatInfo,
                         modifier = Modifier
                             .weight(1f)
@@ -128,16 +124,12 @@ fun Join(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SingleClickJoin(
-    consoleTotal: LiveData<Long>,
-    consoleSeen: LiveData<Long>,
     chatInfo: LiveData<Map<String, ChatInfo>>,
     modifier: Modifier,
     onConsole: () -> Unit,
     onJoin: (String) -> Unit,
 ) {
     val obsChatInfo = chatInfo.observeAsState().value!!
-    val obsConsoleTotal = consoleTotal.observeAsState().value!!
-    val obsConsoleSeen = consoleSeen.observeAsState().value!!
     Text(
         text = "Chats/Channels",
         fontWeight = FontWeight.Bold,
@@ -153,6 +145,8 @@ fun SingleClickJoin(
             horizontalArrangement = Arrangement.Center,
         ) {
             for (key in obsChatInfo.keys.sorted()) {
+                if (key.isEmpty())
+                    continue
                 val info = obsChatInfo[key]!!
                 val obsTotalCount = info.totalCount.observeAsState()
                 val obsSeenCount = info.seenCount.observeAsState()
@@ -171,8 +165,11 @@ fun SingleClickJoin(
                         onJoin = onJoin,
                     )
             }
+            val consoleInfo = obsChatInfo[""]!!
+            val obsConsoleTotal = consoleInfo.totalCount.observeAsState()
+            val obsConsoleSeen = consoleInfo.seenCount.observeAsState()
             ConsoleButton(
-                badged = obsConsoleTotal != obsConsoleSeen,
+                badged = obsConsoleTotal.value != obsConsoleSeen.value,
                 onConsole = onConsole,
             )
         }
@@ -279,10 +276,13 @@ fun JoinTopBar() {
 @Composable
 fun JoinPreview() {
     Join(
-        consoleTotal = MutableLiveData(7L),
-        consoleSeen = MutableLiveData(0L),
         chatInfo = MutableLiveData(
             mapOf(
+                "" to ChatInfo(
+                    name = "",
+                    totalCount = MutableLiveData(7L),
+                    seenCount = MutableLiveData(0L),
+                ),
                 "pacujo" to ChatInfo(
                     name = "pacujo",
                     totalCount = MutableLiveData(20L),
