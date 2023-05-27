@@ -72,7 +72,6 @@ class Journal(
         val str = stringWriter.toString()
         require(!str.contains(terminator))
         mutex.withLock {
-            logDebug(true, "write $str")
             outputWriter.write(str)
             outputWriter.write(terminator.code)
             outputWriter.flush()
@@ -88,7 +87,6 @@ class Journal(
      * create gaps in the flow. */
     suspend fun input() = flow {
         val queue = openJournalFiles()
-        logDebug(true, "qsize: ${queue.size}")
         try {
             while (queue.isNotEmpty())
                 queue.remove().use { inputStream ->
@@ -126,7 +124,6 @@ class Journal(
         val chunkFlow = readFlow { buf ->
             val chunk = ByteArray(size = min(10_000, buf.remaining()))
             inputStream.read(chunk).also { count ->
-                logDebug(true, "count = $count")
                 if (count > 0)
                     buf.put(chunk, 0, count)
             }
@@ -138,7 +135,6 @@ class Journal(
     }
 
     private fun rotate() {
-        logDebug(true, "rotate")
         val actualLength = journalFile.length()
         rotatedLength += actualLength
         val newFileName = instantFileName(Instant.now())
