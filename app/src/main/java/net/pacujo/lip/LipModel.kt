@@ -285,11 +285,12 @@ class LipModel : ViewModel() {
             "301" -> rplAway301(message)
             "372" -> rplMotd372(message)
             "366", "376" -> true // RPL_ENDOFNAMES, RPL_ENDOFMOTD
-            "JOIN" -> tbd("JOIN")
-            "MODE" -> tbd("MODE")
+            "401" -> rplNoSuchNick401(message)
+            //"JOIN" -> tbd("JOIN")
+            //"MODE" -> tbd("MODE")
             "NICK" -> nick(message)
-            "NOTICE" -> tbd("NOTICE")
-            "PART" -> tbd("PART")
+            //"NOTICE" -> tbd("NOTICE")
+            //"PART" -> tbd("PART")
             "PING" -> ping(message)
             "PRIVMSG" -> privmsg(message)
             else -> false
@@ -342,27 +343,36 @@ class LipModel : ViewModel() {
         )
     }
 
-    private fun rplAway301(message: ParsedMessage): Boolean {
-        if (message.params.size != 3)
-            return false
-        val (_, nick, awayMsg) = message.params
-        if (!validNick(nick))
-            return false
-        val chat = chats[nick] ?: return false
-        chat.indicateMessage(
-            from = chat.name,
-            text = "$nick away: $awayMsg",
-            mood = Mood.LOG,
-            notify = false,
-        )
-        consoleInfo(message.timestamp, message.subparams(1))
-        return true
-    }
+    private fun rplAway301(message: ParsedMessage) =
+        simpleChatError(message, "away", Mood.INFO)
 
     private fun rplMotd372(message: ParsedMessage): Boolean {
         if (message.params.isEmpty())
             return false
         consoleInfo(message.timestamp, message.subparams(1))
+        return true
+    }
+
+    private fun rplNoSuchNick401(message: ParsedMessage) =
+        simpleChatError(message, "not known", Mood.ERROR)
+
+    private fun simpleChatError(
+        message: ParsedMessage,
+        trouble: String,
+        mood: Mood,
+    ): Boolean {
+        if (message.params.size != 3)
+            return false
+        val (_, name, explanation) = message.params
+        if (!validNick(name))
+            return false
+        val chat = chats[name.toIRCLower()] ?: return false
+        chat.indicateMessage(
+            from = chat.name,
+            text = "$name $trouble: $explanation",
+            mood = mood,
+            notify = false,
+        )
         return true
     }
 
