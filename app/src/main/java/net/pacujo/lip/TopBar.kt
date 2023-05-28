@@ -21,7 +21,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.MutableLiveData
@@ -30,29 +29,21 @@ import kotlin.math.sign
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TopBar(
-    chatName: String,
+    title: String,
     favorite: Boolean? = null,
     toggleFavorite: (() -> Unit)? = null,
-    chatInfo: Map<String, ChatInfo>,
+    otherChatInfo: Map<String, ChatInfo>,
     back: () -> Unit,
 ) {
-    val otherActiveChatCount = chatInfo.entries
-        .map {
-            with(it.value) {
-                (totalCount.observeAsState().value!! -
-                        seenCount.observeAsState().value!!).sign
-            }
-        }.sum()
-    val backBadgeObject = if (otherActiveChatCount > 0)
-        otherActiveChatCount
-    else
-        null
+    val unseen =
+        otherChatInfo.entries.map { it.value.observedUnseen().sign }.sum()
+    val backBadgeObject = if (unseen > 0) unseen else null
 
     BackHandler(onBack = back)
     TopAppBar(
         title = {
             Text(
-                text = chatName,
+                text = title,
                 style = MaterialTheme.typography.titleLarge,
             )
         },
@@ -119,10 +110,10 @@ fun TopBarPreview() {
         Scaffold(
             topBar = {
                 TopBar(
-                    chatName = "#kapow",
+                    title = "#kapow",
                     favorite = true,
                     toggleFavorite = {},
-                    chatInfo = mapOf(
+                    otherChatInfo = mapOf(
                         "pacujo" to ChatInfo(
                             name = "pacujo",
                             totalCount = MutableLiveData(20L),

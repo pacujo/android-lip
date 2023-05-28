@@ -19,7 +19,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -35,23 +34,21 @@ import java.time.Instant
 @Composable
 fun ChatView(
     configuration: LiveData<Configuration>,
-    chatName: LiveData<String>,
+    chatName: String,
     contents: LiveData<Array<ProcessedLine>>,
     chatInfo: LiveData<Map<String, ChatInfo>>,
     onSend: (String) -> Unit,
     toggleAutojoin: () -> Unit,
     back: () -> Unit,
 ) {
-    val obsChatName = chatName.observeAsState().value!!
-    val chatKey = obsChatName.toIRCLower()
+    val chatKey = chatName.toIRCLower()
 
     val favorite =
-        configuration.observeAsState().value!!.autojoins.map {
+        configuration.observed().autojoins.map {
             it.toIRCLower()
         }.contains(chatKey)
 
-    val otherChats = chatInfo.observeAsState().value!!
-        .filter { it.key != chatKey }
+    val otherChats = chatInfo.observed().filter { it.key != chatKey }
 
     var message by rememberSaveable { mutableStateOf("") }
 
@@ -75,10 +72,10 @@ fun ChatView(
         Scaffold(
             topBar = {
                 TopBar(
-                    chatName = obsChatName,
+                    title = chatName,
                     favorite = favorite,
                     toggleFavorite = toggleAutojoin,
-                    chatInfo = otherChats,
+                    otherChatInfo = otherChats,
                     back = back,
                 )
                      },
@@ -128,7 +125,7 @@ fun ChatViewPreview() {
     val timestamp = Instant.now()
     ChatView(
         configuration = MutableLiveData(Configuration.default()),
-        chatName = MutableLiveData("#hottub"),
+        chatName = "#hottub",
         contents = MutableLiveData(
             arrayListOf(
                 LogLine(

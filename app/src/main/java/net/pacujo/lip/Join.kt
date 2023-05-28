@@ -35,7 +35,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -107,9 +106,10 @@ fun Join(
                         )
                     }
                 }
-                if (chatInfo.value!!.isNotEmpty())
+                val obsChatInfo = chatInfo.observed()
+                if (obsChatInfo.isNotEmpty())
                     SingleClickJoin(
-                        chatInfo = chatInfo,
+                        obsChatInfo = obsChatInfo,
                         modifier = Modifier
                             .weight(1f)
                             .verticalScroll(rememberScrollState()),
@@ -124,12 +124,11 @@ fun Join(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SingleClickJoin(
-    chatInfo: LiveData<Map<String, ChatInfo>>,
+    obsChatInfo: Map<String, ChatInfo>,
     modifier: Modifier,
     onConsole: () -> Unit,
     onJoin: (String) -> Unit,
 ) {
-    val obsChatInfo = chatInfo.observeAsState().value!!
     Text(
         text = "Chats/Channels",
         fontWeight = FontWeight.Bold,
@@ -144,13 +143,10 @@ fun SingleClickJoin(
             modifier = Modifier.padding(UNIVERSAL_PADDING / 2),
             horizontalArrangement = Arrangement.Center,
         ) {
-            for (key in obsChatInfo.keys.sorted()) {
+            for ((key, info) in obsChatInfo.toSortedMap().entries) {
                 if (key.isEmpty())
                     continue
-                val info = obsChatInfo[key]!!
-                val obsTotalCount = info.totalCount.observeAsState()
-                val obsSeenCount = info.seenCount.observeAsState()
-                val unseen = obsTotalCount.value!! - obsSeenCount.value!!
+                val unseen = info.observedUnseen()
                 val badgeCount = if (unseen > 0L) unseen else null
                 if (validNick(key))
                     ChatButton(
@@ -166,10 +162,8 @@ fun SingleClickJoin(
                     )
             }
             val consoleInfo = obsChatInfo[""]!!
-            val obsConsoleTotal = consoleInfo.totalCount.observeAsState()
-            val obsConsoleSeen = consoleInfo.seenCount.observeAsState()
             ConsoleButton(
-                badged = obsConsoleTotal.value != obsConsoleSeen.value,
+                badged = consoleInfo.observedUnseen() > 0,
                 onConsole = onConsole,
             )
         }

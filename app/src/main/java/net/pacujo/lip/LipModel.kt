@@ -2,6 +2,7 @@ package net.pacujo.lip
 
 import android.util.JsonReader
 import android.util.JsonWriter
+import androidx.compose.runtime.Composable
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -26,12 +27,6 @@ private const val TRACE_DEBUG = false
 private const val ConfigFileName = "lipConfig.json"
 private const val ConfigBackupFileName = "$ConfigFileName.bak"
 private const val ConfigNewFileName = "$ConfigFileName.new"
-
-data class ChatInfo(
-    val name: String, // "" for the console
-    val totalCount: LiveData<Long>,
-    val seenCount: LiveData<Long>,
-)
 
 class LipModel : ViewModel() {
     private lateinit var filesDir: File

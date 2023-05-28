@@ -27,7 +27,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -49,13 +48,13 @@ fun ConfigForm(
     configuration: LiveData<Configuration>,
     onSubmit: (Configuration) -> Unit,
 ) {
-    val obsConfiguration = configuration.observeAsState()
+    val obsConfiguration = configuration.observed()
     
     var state by rememberSaveable {
-        mutableStateOf(obsConfiguration.value!!)
+        mutableStateOf(obsConfiguration)
     }
     var portText by rememberSaveable {
-        mutableStateOf(obsConfiguration.value!!.port.toString())
+        mutableStateOf(obsConfiguration.port.toString())
     }
 
     fun goodToSubmit() =
@@ -63,7 +62,7 @@ fun ConfigForm(
                 state.serverHost != "" && goodTcpPort(portText)
 
     fun resetConfig() {
-        state = obsConfiguration.value!!
+        state = obsConfiguration
         portText = state.port.toString()
     }
 
@@ -114,7 +113,7 @@ fun ConfigForm(
                 }
                 OkOrReset(
                     goodToSubmit = goodToSubmit(),
-                    goodToReset = state != obsConfiguration.value!!,
+                    goodToReset = state != obsConfiguration,
                     onSubmit = { onSubmit(state) },
                     onReset = ::resetConfig,
                 )

@@ -10,6 +10,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
+import androidx.lifecycle.LiveData
 import androidx.lifecycle.ViewModelProvider
 
 class MainActivity : ComponentActivity() {
@@ -48,9 +49,7 @@ private fun SetBarColors() {
 
 @Composable
 fun Application(model: LipModel) {
-    val state = model.state.observeAsState()
-
-    when (state.value) {
+    when (model.state.observed()) {
         AppState.CONFIGURING ->
             ConfigForm(
                 configuration = model.configuration,
@@ -72,11 +71,10 @@ fun Application(model: LipModel) {
             )
 
         AppState.CHAT -> {
-            val chatKey = model.currentChatKey.value!!
-            val chat = model.chats[chatKey]!!
+            val chat = model.chats[model.currentChatKey.observed()]!!
             ChatView(
                 configuration = model.configuration,
-                chatName = model.currentChatKey,
+                chatName = chat.name,
                 contents = chat.contents,
                 chatInfo = model.chatInfo,
                 onSend = model::sendPrivMsg,
@@ -84,7 +82,17 @@ fun Application(model: LipModel) {
                 back = model::leaveChat,
             )
         }
-
-        null -> check(false)
     }
+}
+
+@Composable
+fun <T> LiveData<T>.observed() = observeAsState().value!!
+
+data class ChatInfo(
+    val name: String, // "" for the console
+    val totalCount: LiveData<Long>,
+    val seenCount: LiveData<Long>,
+) {
+    @Composable
+    fun observedUnseen() = totalCount.observed() - seenCount.observed()
 }

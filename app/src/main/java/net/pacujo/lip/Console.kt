@@ -9,7 +9,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.LiveData
@@ -22,8 +21,7 @@ fun Console(
     chatInfo: LiveData<Map<String, ChatInfo>>,
     back: () -> Unit,
 ) {
-    val otherChats = chatInfo.observeAsState().value!!
-        .filter { it.key.isNotEmpty() }
+    val otherChats = chatInfo.observed().filter { it.key.isNotEmpty() }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -31,8 +29,8 @@ fun Console(
         Scaffold(
             topBar = {
                 TopBar(
-                    chatName = "Lip Console",
-                    chatInfo = otherChats,
+                    title = "Lip Console",
+                    otherChatInfo = otherChats,
                     back = back,
                 )
                      },
