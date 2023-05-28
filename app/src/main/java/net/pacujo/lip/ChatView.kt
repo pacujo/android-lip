@@ -1,5 +1,6 @@
 package net.pacujo.lip
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -24,6 +25,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.LiveData
@@ -52,19 +54,40 @@ fun ChatView(
 
     var message by rememberSaveable { mutableStateOf("") }
 
+    val toastContext = LocalContext.current
+
     fun send() {
-        onSend(message)
+        if (message.startsWith("//"))
+            onSend(message.substring(1))
+        else
+            onSend(message)
         message = ""
     }
 
-    fun setMessage(text: String) {
-        if (text.isEmpty() || text.last() != '\n')
-            message = text
-        else if (text.isNotBlank())
-            send()
-    }
+    fun goodToSend() = message.isNotBlank() &&
+            (message[0] != '/' || message.startsWith("//"))
 
-    fun goodToSend() = message.isNotBlank()
+    fun setMessage(text: String) {
+        when {
+            text.isEmpty() || text.last() != '\n' -> message = text
+
+            goodToSend() -> send()
+
+            message.isBlank() ->
+                Toast.makeText(
+                    toastContext,
+                    "Blank message not sent",
+                    Toast.LENGTH_SHORT,
+                ).show()
+
+            else ->
+                Toast.makeText(
+                    toastContext,
+                    "Initial slash must be doubled",
+                    Toast.LENGTH_SHORT,
+                ).show()
+        }
+    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
