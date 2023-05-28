@@ -26,17 +26,16 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.MutableLiveData
 import kotlin.math.sign
 
-@OptIn(ExperimentalMaterial3Api::class)
+
 @Composable
 fun TopBar(
     title: String,
     favorite: Boolean? = null,
     toggleFavorite: (() -> Unit)? = null,
-    otherChatInfo: Map<String, ChatInfo>,
+    otherChatStatus: List<ChatStatus>,
     back: () -> Unit,
 ) {
-    val unseen =
-        otherChatInfo.entries.map { it.value.observedUnseen().sign }.sum()
+    val unseen = otherChatStatus.map { it.observedUnseen().sign }.sum()
     val backBadgeObject = if (unseen > 0) unseen else null
 
     BackHandler(onBack = back)
@@ -113,13 +112,13 @@ fun TopBarPreview() {
                     title = "#kapow",
                     favorite = true,
                     toggleFavorite = {},
-                    otherChatInfo = mapOf(
-                        "pacujo" to ChatInfo(
+                    otherChatStatus = listOf(
+                        ChatStatus(
                             name = "pacujo",
                             totalCount = MutableLiveData(20L),
                             seenCount = MutableLiveData(9L),
                         ),
-                        "#testudo" to ChatInfo(
+                        ChatStatus(
                             name = "#testudo",
                             totalCount = MutableLiveData(100L),
                             seenCount = MutableLiveData(100L),

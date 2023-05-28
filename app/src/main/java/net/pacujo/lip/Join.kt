@@ -45,10 +45,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import kotlin.math.sign
 
 @Composable
 fun Join(
-    chatInfo: LiveData<Map<String, ChatInfo>>,
+    chatInfo: LiveData<List<ChatStatus>>,
     onConsole: () -> Unit,
     onJoin: (String) -> Unit,
 ) {
@@ -124,7 +125,7 @@ fun Join(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SingleClickJoin(
-    obsChatInfo: Map<String, ChatInfo>,
+    obsChatInfo: List<ChatStatus>,
     modifier: Modifier,
     onConsole: () -> Unit,
     onJoin: (String) -> Unit,
@@ -143,29 +144,34 @@ fun SingleClickJoin(
             modifier = Modifier.padding(UNIVERSAL_PADDING / 2),
             horizontalArrangement = Arrangement.Center,
         ) {
-            for ((key, info) in obsChatInfo.toSortedMap().entries) {
-                if (key.isEmpty())
-                    continue
-                val unseen = info.observedUnseen()
+            obsChatInfo.sortedBy {
+                /* move the console last */
+                (1 - it.name.length.sign).toString() + it.name.toIRCLower()
+            }.forEach { status ->
+                val unseen = status.observedUnseen()
                 val badgeCount = if (unseen > 0L) unseen else null
-                if (validNick(key))
-                    ChatButton(
-                        nick = info.name,
-                        badgeCount = badgeCount,
-                        onJoin = onJoin,
-                    )
-                else
-                    ChannelButton(
-                        name = info.name,
-                        badgeCount = badgeCount,
-                        onJoin = onJoin,
-                    )
+                when {
+                    status.name.isEmpty() ->
+                        ConsoleButton(
+                            badged = status.observedUnseen() > 0,
+                            onConsole = onConsole,
+                        )
+
+                    validNick(status.name) ->
+                        ChatButton(
+                            nick = status.name,
+                            badgeCount = badgeCount,
+                            onJoin = onJoin,
+                        )
+
+                    else ->
+                        ChannelButton(
+                            name = status.name,
+                            badgeCount = badgeCount,
+                            onJoin = onJoin,
+                        )
+                }
             }
-            val consoleInfo = obsChatInfo[""]!!
-            ConsoleButton(
-                badged = consoleInfo.observedUnseen() > 0,
-                onConsole = onConsole,
-            )
         }
     }
 }
@@ -271,18 +277,18 @@ fun JoinTopBar() {
 fun JoinPreview() {
     Join(
         chatInfo = MutableLiveData(
-            mapOf(
-                "" to ChatInfo(
+            listOf(
+                ChatStatus(
                     name = "",
                     totalCount = MutableLiveData(7L),
                     seenCount = MutableLiveData(0L),
                 ),
-                "pacujo" to ChatInfo(
+                ChatStatus(
                     name = "pacujo",
                     totalCount = MutableLiveData(20L),
                     seenCount = MutableLiveData(9L),
                 ),
-                "#testudo" to ChatInfo(
+                ChatStatus(
                     name = "#testudo",
                     totalCount = MutableLiveData(100L),
                     seenCount = MutableLiveData(0L),

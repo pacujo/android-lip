@@ -66,7 +66,7 @@ fun Application(model: LipModel) {
         AppState.CONSOLE ->
             Console(
                 contents = model.consoleContents,
-                chatInfo = model.chatInfo,
+                chatStatus = model.chatInfo,
                 back = model::leaveConsole,
             )
 
@@ -76,7 +76,7 @@ fun Application(model: LipModel) {
                 configuration = model.configuration,
                 chatName = chat.name,
                 contents = chat.contents,
-                chatInfo = model.chatInfo,
+                chatStatus = model.chatInfo,
                 onSend = model::sendPrivMsg,
                 toggleAutojoin = chat::toggleAutojoin,
                 back = model::leaveChat,
@@ -87,12 +87,3 @@ fun Application(model: LipModel) {
 
 @Composable
 fun <T> LiveData<T>.observed() = observeAsState().value!!
-
-data class ChatInfo(
-    val name: String, // "" for the console
-    val totalCount: LiveData<Long>,
-    val seenCount: LiveData<Long>,
-) {
-    @Composable
-    fun observedUnseen() = totalCount.observed() - seenCount.observed()
-}

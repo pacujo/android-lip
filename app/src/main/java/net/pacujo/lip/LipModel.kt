@@ -3,7 +3,6 @@ package net.pacujo.lip
 import android.util.JsonReader
 import android.util.JsonWriter
 import androidx.compose.runtime.Composable
-import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -19,6 +18,7 @@ import java.io.File
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 
@@ -27,6 +27,29 @@ private const val TRACE_DEBUG = false
 private const val ConfigFileName = "lipConfig.json"
 private const val ConfigBackupFileName = "$ConfigFileName.bak"
 private const val ConfigNewFileName = "$ConfigFileName.new"
+
+class ChatStatus(
+    val name: String,
+    private val totalCount: MutableLiveData<Long>,
+    private val seenCount: MutableLiveData<Long>,
+) {
+    constructor(name: String) : this(
+        name,
+        MutableLiveData(0L),
+        MutableLiveData(0L),
+    )
+
+    @Composable
+    fun observedUnseen() = totalCount.observed() - seenCount.observed()
+
+    fun look() {
+        seenCount.value = totalCount.value!!
+    }
+
+    fun setTotal(total: Long) {
+        totalCount.value = total
+    }
+}
 
 class LipModel : ViewModel() {
     private lateinit var filesDir: File
@@ -38,13 +61,8 @@ class LipModel : ViewModel() {
 
     private val consoleLogBuffer = LogBuffer()
     val consoleContents = MutableLiveData(consoleLogBuffer.getAll())
-    private val consoleTotal = MutableLiveData(0L)
-    private val consoleSeen = MutableLiveData(0L)
-    private val consoleInfo = ChatInfo(
-        name = "",
-        totalCount = consoleTotal,
-        seenCount = consoleSeen,
-    )
+    private val consoleCount = AtomicLong()
+    private val consoleStatus = ChatStatus("")
 
     private val outputBridge = Channel<String>(capacity = 100)
 
@@ -59,12 +77,10 @@ class LipModel : ViewModel() {
         journal = LipJournal(File(filesDir, "journal"))
     }
 
-    private fun generateChatInfo(): Map<String, ChatInfo> {
-        val result = mutableMapOf("" to consoleInfo)
+    private fun generateChatInfo(): List<ChatStatus> {
+        val result = mutableListOf(consoleStatus)
         for (chat in chats.values)
-            with(chat) {
-                result[key] = ChatInfo(name, totalCount, seenCount)
-            }
+            result.add(chat.status)
         return result
     }
 
@@ -115,7 +131,7 @@ class LipModel : ViewModel() {
 
     fun leaveConsole() {
         check(state.value == AppState.CONSOLE)
-        consoleSeen.value = consoleTotal.value!!
+        consoleStatus.look()
         state.value = AppState.JOIN
     }
 
@@ -167,7 +183,7 @@ class LipModel : ViewModel() {
     fun leaveChat() {
         check(state.value == AppState.CHAT)
         val chat = chats[currentChatKey.value!!]!!
-        chat.seenCount.value = chat.totalCount.value!!
+        chat.status.look()
         state.value = AppState.JOIN
     }
 
@@ -297,7 +313,7 @@ class LipModel : ViewModel() {
             ),
         )
         consoleContents.value = consoleLogBuffer.getAll()
-        consoleTotal.value = consoleTotal.value!! + 1
+        consoleStatus.setTotal(consoleCount.addAndGet(1L))
     }
 
     private fun consoleInfo(timestamp: Instant, params: List<String>) {
@@ -411,8 +427,7 @@ class LipModel : ViewModel() {
         val key: String,
     ) {
         val contents = MutableLiveData(arrayOf<ProcessedLine>())
-        val totalCount = MutableLiveData(0L)
-        val seenCount = MutableLiveData(0L)
+        val status = ChatStatus(name)
         private val messages = Channel<LogLine>(100)
         private val nicksPresent = mutableSetOf<String>()
 
@@ -435,7 +450,7 @@ class LipModel : ViewModel() {
                     while (true)
                         process(messages.tryReceive().getOrNull() ?: break)
                     contents.value = buffer.getAll()
-                    totalCount.value = count
+                    status.setTotal(count)
                     //if (notify)
                     //    issueNotification(from, text)
                     process(messages.receive())

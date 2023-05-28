@@ -36,7 +36,7 @@ fun ChatView(
     configuration: LiveData<Configuration>,
     chatName: String,
     contents: LiveData<Array<ProcessedLine>>,
-    chatInfo: LiveData<Map<String, ChatInfo>>,
+    chatStatus: LiveData<List<ChatStatus>>,
     onSend: (String) -> Unit,
     toggleAutojoin: () -> Unit,
     back: () -> Unit,
@@ -48,7 +48,8 @@ fun ChatView(
             it.toIRCLower()
         }.contains(chatKey)
 
-    val otherChats = chatInfo.observed().filter { it.key != chatKey }
+    val otherChats =
+        chatStatus.observed().filter { it.name.toIRCLower() != chatKey }
 
     var message by rememberSaveable { mutableStateOf("") }
 
@@ -75,7 +76,7 @@ fun ChatView(
                     title = chatName,
                     favorite = favorite,
                     toggleFavorite = toggleAutojoin,
-                    otherChatInfo = otherChats,
+                    otherChatStatus = otherChats,
                     back = back,
                 )
                      },
@@ -162,14 +163,14 @@ fun ChatViewPreview() {
                 ),
             ).toLogBuffer().getAll(),
         ),
-        chatInfo = MutableLiveData(
-            mapOf(
-                "pacujo" to ChatInfo(
+        chatStatus = MutableLiveData(
+            listOf(
+                ChatStatus(
                     name = "pacujo",
                     totalCount = MutableLiveData(20L),
                     seenCount = MutableLiveData(9L),
                 ),
-                "#testudo" to ChatInfo(
+                ChatStatus(
                     name = "#testudo",
                     totalCount = MutableLiveData(100L),
                     seenCount = MutableLiveData(100L),

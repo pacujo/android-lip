@@ -18,10 +18,10 @@ import java.time.Instant
 @Composable
 fun Console(
     contents: LiveData<Array<ProcessedLine>>,
-    chatInfo: LiveData<Map<String, ChatInfo>>,
+    chatStatus: LiveData<List<ChatStatus>>,
     back: () -> Unit,
 ) {
-    val otherChats = chatInfo.observed().filter { it.key.isNotEmpty() }
+    val otherChats = chatStatus.observed().filter { it.name.isNotEmpty() }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -30,7 +30,7 @@ fun Console(
             topBar = {
                 TopBar(
                     title = "Lip Console",
-                    otherChatInfo = otherChats,
+                    otherChatStatus = otherChats,
                     back = back,
                 )
                      },
@@ -89,14 +89,14 @@ fun ConsolePreview() {
                 ),
             ).toLogBuffer().getAll(),
         ),
-        chatInfo = MutableLiveData(
-            mapOf(
-                "pacujo" to ChatInfo(
+        chatStatus = MutableLiveData(
+            listOf(
+                ChatStatus(
                     name = "pacujo",
                     totalCount = MutableLiveData(20L),
                     seenCount = MutableLiveData(9L),
                 ),
-                "#testudo" to ChatInfo(
+                ChatStatus(
                     name = "#testudo",
                     totalCount = MutableLiveData(100L),
                     seenCount = MutableLiveData(100L),
