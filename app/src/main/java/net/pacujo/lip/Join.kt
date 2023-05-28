@@ -49,10 +49,12 @@ import kotlin.math.sign
 
 @Composable
 fun Join(
+    configuration: LiveData<Configuration>,
     chatInfo: LiveData<List<ChatStatus>>,
     onConsole: () -> Unit,
     onJoin: (String) -> Unit,
 ) {
+    val obsConfiguration = configuration.observed()
     var chatName by rememberSaveable { mutableStateOf("") }
 
     fun goodToSubmit() = validNick(chatName) || validChannelName(chatName)
@@ -71,7 +73,9 @@ fun Join(
     }
 
     Surface(modifier = Modifier.fillMaxSize()) {
-        Scaffold(topBar = { JoinTopBar() }) { contentPadding ->
+        Scaffold(
+            topBar = { JoinTopBar(nick = obsConfiguration.nick) },
+        ) { contentPadding ->
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
@@ -251,7 +255,9 @@ fun BadgedLabel(
 }
 
 @Composable
-fun JoinTopBar() {
+fun JoinTopBar(
+    nick: String,
+) {
     TopAppBar(
         title = {
             Row(
@@ -265,6 +271,9 @@ fun JoinTopBar() {
                 }
             }
         },
+        actions = {
+            FavoriteAction(nick = nick)
+        },
         colors = TopAppBarDefaults.mediumTopAppBarColors(
             containerColor = MaterialTheme.colorScheme.primary,
             titleContentColor = MaterialTheme.colorScheme.onPrimary,
@@ -276,6 +285,9 @@ fun JoinTopBar() {
 @Composable
 fun JoinPreview() {
     Join(
+        configuration = MutableLiveData(
+            Configuration.default().copy(nick = "testudo")
+        ),
         chatInfo = MutableLiveData(
             listOf(
                 ChatStatus(

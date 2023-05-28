@@ -42,11 +42,10 @@ fun ChatView(
     back: () -> Unit,
 ) {
     val chatKey = chatName.toIRCLower()
+    val obsConfiguration = configuration.observed()
 
     val favorite =
-        configuration.observed().autojoins.map {
-            it.toIRCLower()
-        }.contains(chatKey)
+        obsConfiguration.autojoins.map { it.toIRCLower() }.contains(chatKey)
 
     val otherChats =
         chatStatus.observed().filter { it.name.toIRCLower() != chatKey }
@@ -74,6 +73,7 @@ fun ChatView(
             topBar = {
                 TopBar(
                     title = chatName,
+                    nick = obsConfiguration.nick,
                     favorite = favorite,
                     toggleFavorite = toggleAutojoin,
                     otherChatStatus = otherChats,

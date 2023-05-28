@@ -104,12 +104,16 @@ class LipModel : ViewModel() {
 
     fun configure(newConfiguration: Configuration) {
         check(state.value == AppState.CONFIGURING)
-        configuration.value = newConfiguration
-        saveConfiguration()
+        updateConfiguration(newConfiguration)
         state.value = AppState.JOIN
         communicate()
         for (chatName in newConfiguration.autojoins)
             join(chatName)
+    }
+
+    private fun updateConfiguration(newConfiguration: Configuration) {
+        configuration.value = newConfiguration
+        saveConfiguration()
     }
 
     private fun saveConfiguration() {
@@ -283,7 +287,7 @@ class LipModel : ViewModel() {
             "366", "376" -> true // RPL_ENDOFNAMES, RPL_ENDOFMOTD
             "JOIN" -> tbd("JOIN")
             "MODE" -> tbd("MODE")
-            "NICK" -> tbd("NICK")
+            "NICK" -> nick(message)
             "NOTICE" -> tbd("NOTICE")
             "PART" -> tbd("PART")
             "PING" -> ping(message)
@@ -327,9 +331,15 @@ class LipModel : ViewModel() {
     private fun rplWelcome001(message: ParsedMessage): Boolean {
         if (message.params.isEmpty())
             return false
-        //resetNick(params[0])   // TODO
+        resetNick(message.params[0])
         consoleInfo(message.timestamp, message.subparams(1))
         return true
+    }
+
+    private fun resetNick(newNick: String) {
+        updateConfiguration(
+            configuration.value!!.copy(nick = newNick)
+        )
     }
 
     private fun rplAway301(message: ParsedMessage): Boolean {
@@ -353,6 +363,17 @@ class LipModel : ViewModel() {
         if (message.params.isEmpty())
             return false
         consoleInfo(message.timestamp, message.subparams(1))
+        return true
+    }
+
+    private fun nick(message: ParsedMessage): Boolean {
+        if (message.params.size != 1 || message.prefix == null)
+            return false
+        val newNick = message.params[0]
+        val parts = parsePrefixParts(message.prefix) ?: return false
+        if (parts.nick != newNick)
+            return false
+        resetNick(newNick)
         return true
     }
 
@@ -466,10 +487,9 @@ class LipModel : ViewModel() {
                     autojoins.filter { it.toIRCLower() != key }
                 else
                     autojoins + name
-            configuration.value = currentConfiguration.copy(
-                autojoins = newAutojoins
+            updateConfiguration(
+                currentConfiguration.copy(autojoins = newAutojoins),
             )
-            saveConfiguration()
         }
 
         private fun highlight(s: String) = highlightURLs(highlightNicks(s))

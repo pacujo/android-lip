@@ -17,10 +17,12 @@ import java.time.Instant
 
 @Composable
 fun Console(
+    configuration: LiveData<Configuration>,
     contents: LiveData<Array<ProcessedLine>>,
     chatStatus: LiveData<List<ChatStatus>>,
     back: () -> Unit,
 ) {
+    val obsConfiguration = configuration.observed()
     val otherChats = chatStatus.observed().filter { it.name.isNotEmpty() }
 
     Surface(
@@ -30,6 +32,7 @@ fun Console(
             topBar = {
                 TopBar(
                     title = "Lip Console",
+                    nick = obsConfiguration.nick,
                     otherChatStatus = otherChats,
                     back = back,
                 )
@@ -51,6 +54,9 @@ fun Console(
 fun ConsolePreview() {
     val timestamp = Instant.now()
     Console(
+        configuration = MutableLiveData(
+            Configuration.default().copy(nick = "testudo")
+        ),
         contents = MutableLiveData(
             arrayListOf(
                 LogLine(

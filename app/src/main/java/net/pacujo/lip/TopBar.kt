@@ -3,6 +3,7 @@
 package net.pacujo.lip
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -21,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.MutableLiveData
@@ -30,8 +32,9 @@ import kotlin.math.sign
 @Composable
 fun TopBar(
     title: String,
+    nick: String,
     favorite: Boolean? = null,
-    toggleFavorite: (() -> Unit)? = null,
+    toggleFavorite: () -> Unit = {},
     otherChatStatus: List<ChatStatus>,
     back: () -> Unit,
 ) {
@@ -52,20 +55,36 @@ fun TopBar(
             }
         },
         actions = {
-            if (favorite != null && toggleFavorite != null)
-                IconButton(onClick = toggleFavorite) {
-                    Icon(
-                        imageVector = favoriteIcon(favorite),
-                        contentDescription = "Favorite",
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                    )
-                }
+            FavoriteAction(nick, favorite, toggleFavorite)
         },
         colors = TopAppBarDefaults.mediumTopAppBarColors(
             containerColor = MaterialTheme.colorScheme.primary,
             titleContentColor = MaterialTheme.colorScheme.onPrimary,
         ),
     )
+}
+
+@Composable
+fun FavoriteAction(
+    nick: String,
+    favorite: Boolean? = null,
+    toggleFavorite: () -> Unit = {},
+) {
+    Column(
+        horizontalAlignment = Alignment.End,
+    ) {
+        Text(
+            text = nick,
+            color = MaterialTheme.colorScheme.onPrimary,
+        )
+        IconButton(onClick = toggleFavorite) {
+            Icon(
+                imageVector = favoriteIcon(favorite),
+                contentDescription = favoriteDescription(favorite),
+                tint = favoriteTint(favorite),
+            )
+        }
+    }
 }
 
 @Composable
@@ -94,11 +113,24 @@ fun BackArrow() {
     )
 }
 
-private fun favoriteIcon(favorite: Boolean) =
-    if (favorite)
+private fun favoriteIcon(favorite: Boolean?) =
+    if (favorite == true)
         Icons.Default.Favorite
     else
         Icons.Default.FavoriteBorder
+
+private fun favoriteDescription(favorite: Boolean?) =
+    if (favorite == null)
+        null
+    else
+        "Favorite"
+
+@Composable
+private fun favoriteTint(favorite: Boolean?) =
+    if (favorite == null)
+        MaterialTheme.colorScheme.primary // dummy: invisible on primary
+    else
+        MaterialTheme.colorScheme.onPrimary
 
 @Preview
 @Composable
@@ -110,6 +142,7 @@ fun TopBarPreview() {
             topBar = {
                 TopBar(
                     title = "#kapow",
+                    nick = "testudo",
                     favorite = true,
                     toggleFavorite = {},
                     otherChatStatus = listOf(

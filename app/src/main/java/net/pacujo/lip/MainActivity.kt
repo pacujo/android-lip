@@ -58,6 +58,7 @@ fun Application(model: LipModel) {
 
         AppState.JOIN ->
             Join(
+                configuration = model.configuration,
                 chatInfo = model.chatInfo,
                 onConsole = model::showConsole,
                 onJoin = { model.doJoin(it) },
@@ -65,6 +66,7 @@ fun Application(model: LipModel) {
 
         AppState.CONSOLE ->
             Console(
+                configuration = model.configuration,
                 contents = model.consoleContents,
                 chatStatus = model.chatInfo,
                 back = model::leaveConsole,
