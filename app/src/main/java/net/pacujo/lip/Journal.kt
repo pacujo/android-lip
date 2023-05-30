@@ -5,6 +5,7 @@ import android.util.JsonWriter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flow
@@ -21,7 +22,6 @@ import java.io.FileOutputStream
 import java.io.OutputStreamWriter
 import java.io.StringWriter
 import java.io.Writer
-import java.lang.IllegalArgumentException
 import java.time.DateTimeException
 import java.time.Instant
 import java.util.LinkedList
@@ -97,19 +97,56 @@ class Journal(
         }
     }
 
+    suspend fun editRecords(predicate: (String) -> Boolean) {
+        suspend fun edit(fileName: String): FileSize {
+            val origFile = File(journalDir, fileName)
+            val tempFile = File(journalDir, "temp.log")
+            dataInputStream(origFile).use { inputStream ->
+                BufferedWriter(
+                    OutputStreamWriter(
+                        FileOutputStream(tempFile),
+                    ),
+                ).use { tempWriter ->
+                    recordFlow(inputStream).collect { (record, terminated) ->
+                        if (!terminated)
+                            tempWriter.write(record)
+                        else if (predicate(record)) {
+                            tempWriter.write(record)
+                            tempWriter.write(terminator.code)
+                        }
+                    }
+                }
+            }
+            origFile.delete()
+            tempFile.renameTo(origFile)
+            return origFile.length()
+        }
+
+        rotatedLength = 0L
+        mutex.withLock {
+            for (fileName in rotatedFiles.keys) {
+                val length = edit(fileName)
+                rotatedFiles[fileName] = length
+                rotatedLength += length
+            }
+            tentativeLength = edit(journalFileName)
+            outputWriter.close()
+            outputWriter =
+                BufferedWriter(
+                    OutputStreamWriter(
+                        FileOutputStream(journalFile, true),
+                    ),
+                )
+        }
+    }
+
     private suspend fun openJournalFiles(): Queue<DataInputStream> {
         val queue = LinkedList<DataInputStream>()
         mutex.withLock {
             flow {
-                suspend fun emitInputStream(fileName: String) {
-                    val fis = FileInputStream(File(journalDir, fileName))
-                    val bis = BufferedInputStream(fis)
-                    emit(DataInputStream(bis))
-                }
-
                 for (fileName in rotatedFiles.keys)
-                    emitInputStream(fileName)
-                emitInputStream(journalFileName)
+                    emit(dataInputStream(File(journalDir, fileName)))
+                emit(dataInputStream(File(journalDir, journalFileName)))
             }
         }.collect {
             queue.add(it)
@@ -117,10 +154,21 @@ class Journal(
         return queue
     }
 
+    private fun dataInputStream(file: File) =
+        DataInputStream(BufferedInputStream(FileInputStream(file)))
+
     private suspend fun emitRecords(
         flowCollector: FlowCollector<String>,
         inputStream: DataInputStream,
     ) {
+        recordFlow(inputStream).filter { it.second }.collect {
+            flowCollector.emit(it.first)
+        }
+    }
+
+    private fun recordFlow(
+        inputStream: DataInputStream,
+    ): Flow<Pair<String, Boolean>> {
         val chunkFlow = readFlow { buf ->
             val chunk = ByteArray(size = min(10_000, buf.remaining()))
             inputStream.read(chunk).also { count ->
@@ -128,10 +176,8 @@ class Journal(
                     buf.put(chunk, 0, count)
             }
         }
-        val recordFlow = chunksToRecords(chunkFlow, terminator.code.toByte())
-        stringifyChunks(recordFlow).filter { it.second }.collect {
-            flowCollector.emit(it.first)
-        }
+        val lineFlow = chunksToRecords(chunkFlow, terminator.code.toByte())
+        return stringifyChunks(lineFlow)
     }
 
     private fun rotate() {
@@ -206,6 +252,12 @@ class LipJournal(journalDir: File) {
                 .filter { it.first == chatKey }
                 .collect { add(it.second) }
         }
+
+    suspend fun expunge(chatKey: String) {
+        journal.editRecords { record ->
+            chatKey != parse(JsonReader(record.reader())).first
+        }
+    }
 
     companion object {
         private val entrySchema = JsonSchema(

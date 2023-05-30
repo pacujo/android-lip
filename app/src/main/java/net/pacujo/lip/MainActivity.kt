@@ -73,19 +73,39 @@ fun Application(model: LipModel) {
             )
 
         AppState.CHAT -> {
-            val chat = model.chats[model.currentChatKey.observed()]!!
+            val chat = model.observedChat()
             ChatView(
                 configuration = model.configuration,
                 chatName = chat.name,
                 contents = chat.contents,
                 chatStatus = model.chatInfo,
-                onSend = model::sendPrivMsg,
+                onSend = chat::sendPrivMsg,
                 toggleAutojoin = chat::toggleAutojoin,
-                back = model::leaveChat,
+                onPart = chat::part,
+                onClearChat = chat::clear,
+                onDeleteChat = chat::delete,
+                back = chat::leave,
             )
         }
+
+        AppState.CLEARING ->
+            Clearing(
+                configuration = model.configuration,
+                chatName = model.observedChat().name,
+                chatStatus = model.chatInfo,
+            )
+
+        AppState.DELETING ->
+            Deleting(
+                configuration = model.configuration,
+                chatName = model.observedChat().name,
+                chatStatus = model.chatInfo,
+            )
     }
 }
+
+@Composable
+fun LipModel.observedChat() = chats[currentChatKey.observed()]!!
 
 @Composable
 fun <T> LiveData<T>.observed() = observeAsState().value!!

@@ -41,6 +41,9 @@ fun ChatView(
     chatStatus: LiveData<List<ChatStatus>>,
     onSend: (String) -> Unit,
     toggleAutojoin: () -> Unit,
+    onPart: () -> Unit,
+    onClearChat: () -> Unit,
+    onDeleteChat: () -> Unit,
     back: () -> Unit,
 ) {
     val chatKey = chatName.toIRCLower()
@@ -99,6 +102,9 @@ fun ChatView(
                     nick = obsConfiguration.nick,
                     favorite = favorite,
                     toggleFavorite = toggleAutojoin,
+                    onPart = onPart,
+                    onClearChat = onClearChat,
+                    onDeleteChat = onDeleteChat,
                     otherChatStatus = otherChats,
                     back = back,
                 )
@@ -148,7 +154,9 @@ fun ChatView(
 fun ChatViewPreview() {
     val timestamp = Instant.now()
     ChatView(
-        configuration = MutableLiveData(Configuration.default()),
+        configuration = MutableLiveData(
+            Configuration.default().copy(nick = "testudo"),
+        ),
         chatName = "#hottub",
         contents = MutableLiveData(
             arrayListOf(
@@ -202,6 +210,9 @@ fun ChatViewPreview() {
         ),
         onSend = {},
         toggleAutojoin = {},
+        onPart = {},
+        onClearChat = {},
+        onDeleteChat = {},
         back = {},
     )
 }

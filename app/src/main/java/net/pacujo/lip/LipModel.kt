@@ -171,26 +171,6 @@ class LipModel : ViewModel() {
                 }
     }
 
-    fun sendPrivMsg(text: String) {
-        check(state.value == AppState.CHAT)
-        val chat = chats[currentChatKey.value!!]!!
-        val archived = text // markupToArchive(text)
-        chat.indicateMessage(
-            from = configuration.value!!.nick,
-            text = archived,
-            mood = Mood.MINE,
-            notify = false,
-        )
-        command("PRIVMSG ${chat.name} :$text")
-    }
-
-    fun leaveChat() {
-        check(state.value == AppState.CHAT)
-        val chat = chats[currentChatKey.value!!]!!
-        chat.status.look()
-        state.value = AppState.JOIN
-    }
-
     private fun communicate() {
         val connectionBridge = Channel<Connection>(0)
         viewModelScope.launchGuarded(Dispatchers.IO) {
@@ -368,7 +348,7 @@ class LipModel : ViewModel() {
             return false
         val chat = chats[name.toIRCLower()] ?: return false
         chat.indicateMessage(
-            from = chat.name,
+            from = null,
             text = "$name $trouble: $explanation",
             mood = mood,
             notify = false,
@@ -482,24 +462,99 @@ class LipModel : ViewModel() {
                         process(messages.tryReceive().getOrNull() ?: break)
                     contents.value = buffer.getAll()
                     status.setTotal(count)
-                    //if (notify)
-                    //    issueNotification(from, text)
                     process(messages.receive())
                 }
             }
         }
 
+        fun sendPrivMsg(text: String) {
+            check(state.value == AppState.CHAT)
+            val archived = text // markupToArchive(text)
+            indicateMessage(
+                from = configuration.value!!.nick,
+                text = archived,
+                mood = Mood.MINE,
+                notify = false,
+            )
+            command("PRIVMSG $name :$text")
+        }
+
+        fun leave() {
+            check(state.value == AppState.CHAT)
+            status.look()
+            state.value = AppState.JOIN
+        }
+
         fun toggleAutojoin() {
+            check(state.value == AppState.CHAT)
+            if (isFavorite())
+                turnOffFavorite()
+            else
+                turnOnFavorite()
+        }
+
+        fun isFavorite() =
+            configuration.value!!.autojoins
+                .map { it.toIRCLower() }.contains(key)
+
+        fun turnOnFavorite() {
+            if (!isFavorite()) {
+                val currentConfiguration = configuration.value!!
+                val newAutojoins = currentConfiguration.autojoins + name
+                updateConfiguration(
+                    currentConfiguration.copy(autojoins = newAutojoins),
+                )
+            }
+        }
+
+        fun turnOffFavorite() {
             val currentConfiguration = configuration.value!!
-            val autojoins = currentConfiguration.autojoins
             val newAutojoins =
-                if (autojoins.map { it.toIRCLower() }.contains(key))
-                    autojoins.filter { it.toIRCLower() != key }
-                else
-                    autojoins + name
+                currentConfiguration.autojoins.filter { it.toIRCLower() != key }
             updateConfiguration(
                 currentConfiguration.copy(autojoins = newAutojoins),
             )
+        }
+
+        fun clear() {
+            check(state.value == AppState.CHAT)
+            state.value = AppState.CLEARING
+            val expungeJob = viewModelScope.launchGuarded(Dispatchers.IO) {
+                journal.expunge(key)
+            }
+            viewModelScope.launchGuarded {
+                expungeJob.join()
+                chats[key] = Chat(name, key)
+                chatInfo.value = generateChatInfo()
+                state.value = AppState.CHAT
+            }
+        }
+
+        fun delete() {
+            check(state.value == AppState.CHAT)
+            state.value = AppState.DELETING
+            if (validChannelName(name))
+                command("PART $name")
+            val expungeJob = viewModelScope.launchGuarded(Dispatchers.IO) {
+                journal.expunge(key)
+            }
+            viewModelScope.launchGuarded {
+                expungeJob.join()
+                turnOffFavorite()
+                chats.remove(key)
+                chatInfo.value = generateChatInfo()
+                state.value = AppState.JOIN
+            }
+        }
+
+        fun part() {
+            check(state.value == AppState.CHAT)
+            if (validChannelName(name))
+                command("PART $name")
+            turnOffFavorite()
+            chats.remove(key)
+            chatInfo.value = generateChatInfo()
+            state.value = AppState.JOIN
         }
 
         private fun highlight(s: String) = highlightURLs(highlightNicks(s))
@@ -803,6 +858,6 @@ private fun parsePrefixParts(prefix: String): PrefixParts? {
 }
 
 enum class AppState {
-    CONFIGURING, JOIN, CONSOLE, CHAT,
+    CONFIGURING, JOIN, CONSOLE, CHAT, CLEARING, DELETING,
 }
 
