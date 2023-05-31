@@ -49,9 +49,6 @@ fun ChatView(
     val chatKey = chatName.toIRCLower()
     val obsConfiguration = configuration.observed()
 
-    val favorite =
-        obsConfiguration.autojoins.map { it.toIRCLower() }.contains(chatKey)
-
     val otherChats =
         chatStatus.observed().filter { it.name.toIRCLower() != chatKey }
 
@@ -97,16 +94,15 @@ fun ChatView(
     ) {
         Scaffold(
             topBar = {
-                TopBar(
-                    title = chatName,
-                    nick = obsConfiguration.nick,
-                    favorite = favorite,
-                    toggleFavorite = toggleAutojoin,
+                ChatTopBar(
+                    chatName = chatName,
+                    autojoin = obsConfiguration.amongAutojoins(chatKey),
+                    toggleAutojoin = toggleAutojoin,
                     onPart = onPart,
                     onClearChat = onClearChat,
                     onDeleteChat = onDeleteChat,
                     otherChatStatus = otherChats,
-                    back = back,
+                    onBack = back,
                 )
                      },
         ) { contentPadding ->
@@ -125,7 +121,7 @@ fun ChatView(
                 ) {
                     TextEntry(
                         modifier = Modifier.weight(1f),
-                        label = "Message",
+                        label = "${obsConfiguration.nick} ⮕ $chatName",
                         value = message,
                         setter = { setMessage(it) },
                     )

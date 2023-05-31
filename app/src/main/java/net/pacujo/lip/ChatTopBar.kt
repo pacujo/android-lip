@@ -3,8 +3,6 @@
 package net.pacujo.lip
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -34,48 +32,44 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.MutableLiveData
 import kotlin.math.sign
 
-
 @Composable
-fun TopBar(
-    title: String,
-    nick: String,
-    favorite: Boolean? = null,
-    toggleFavorite: () -> Unit = {},
-    onPart: () -> Unit = {},
-    onClearChat: () -> Unit = {},
-    onDeleteChat: () -> Unit = {},
+fun ChatTopBar(
+    chatName: String,
+    autojoin: Boolean,
+    toggleAutojoin: () -> Unit,
+    onPart: () -> Unit,
+    onClearChat: () -> Unit,
+    onDeleteChat: () -> Unit,
     otherChatStatus: List<ChatStatus>,
-    back: () -> Unit,
+    onBack: () -> Unit,
 ) {
     val unseen = otherChatStatus.map { it.observedUnseen().sign }.sum()
     val backBadgeObject = if (unseen > 0) unseen else null
 
-    BackHandler(onBack = back)
+    BackHandler(onBack = onBack)
     TopAppBar(
         title = {
             Text(
-                text = title,
+                text = chatName,
                 style = MaterialTheme.typography.titleLarge,
             )
         },
         navigationIcon = {
-            IconButton(onClick = back) {
+            IconButton(onClick = onBack) {
                 BadgedBackArrow(badgeObject = backBadgeObject)
             }
         },
         actions = {
-            FavoriteAction(
-                nick = nick,
-                chat = title,
-                favorite = favorite,
-                toggleFavorite = toggleFavorite,
+            ChatTopActions(
+                chatName = chatName,
+                autojoin = autojoin,
+                toggleAutojoin = toggleAutojoin,
                 onPart = onPart,
                 onClearChat = onClearChat,
                 onDeleteChat = onDeleteChat,
@@ -89,11 +83,10 @@ fun TopBar(
 }
 
 @Composable
-fun FavoriteAction(
-    nick: String,
-    chat: String? = null,
-    favorite: Boolean? = null,
-    toggleFavorite: () -> Unit = {},
+fun ChatTopActions(
+    chatName: String,
+    autojoin: Boolean,
+    toggleAutojoin: () -> Unit = {},
     onPart: () -> Unit = {},
     onClearChat: () -> Unit = {},
     onDeleteChat: () -> Unit = {},
@@ -105,68 +98,55 @@ fun FavoriteAction(
     val (confirmDelete, setConfirmDelete) =
         remember { mutableStateOf(false) }
 
-    Column(
-        horizontalAlignment = Alignment.End,
-    ) {
-        Text(
-            text = nick,
-            color = MaterialTheme.colorScheme.onPrimary,
+    IconButton(onClick = toggleAutojoin) {
+        Icon(
+            imageVector = favoriteIcon(autojoin),
+            contentDescription = "Autojoin",
+            tint = MaterialTheme.colorScheme.onPrimary,
         )
-        Row {
-            IconButton(onClick = toggleFavorite) {
-                Icon(
-                    imageVector = favoriteIcon(favorite),
-                    contentDescription = favoriteDescription(favorite),
-                    tint = favoriteTint(favorite),
-                )
-            }
-            if (chat != null && favorite != null) {
-                IconButton(onClick = { setExpanded(true) }) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "Menu",
-                        tint = favoriteTint(favorite),
-                    )
-                }
-                when {
-                    confirmClear -> ConfirmDialog(
-                        chat, onClearChat, setConfirmClear,
-                        Icons.Default.Clear,
-                        "Clear Chat History?", "Clear",
-                    )
+    }
+    IconButton(onClick = { setExpanded(true) }) {
+        Icon(
+            imageVector = Icons.Default.MoreVert,
+            contentDescription = "Menu",
+            tint = MaterialTheme.colorScheme.onPrimary,
+        )
+    }
+    when {
+        confirmClear -> ConfirmDialog(
+            onClearChat, setConfirmClear,
+            Icons.Default.Clear,
+            "Clear Chat History?", chatName, "Clear",
+        )
 
-                    confirmDelete -> ConfirmDialog(
-                        chat, onDeleteChat, setConfirmDelete,
-                        Icons.Default.Delete,
-                        "Delete Chat?", "Delete",
-                    )
+        confirmDelete -> ConfirmDialog(
+            onDeleteChat, setConfirmDelete,
+            Icons.Default.Delete,
+            "Delete Chat?", chatName, "Delete",
+        )
 
-                    /* Do not compose an alert dialog simultanously with a
-                     * dropdown menu! It messes up the UI. */
-                    else -> Menu(
-                        onPart, expanded, setExpanded,
-                        setConfirmClear, setConfirmDelete,
-                    )
-                }
-            }
-        }
+        /* Do not compose an alert dialog simultaneously with a dropdown menu!
+         * It messes up the UI. */
+        else -> Menu(
+            onPart, expanded, setExpanded,
+            setConfirmClear, setConfirmDelete,
+        )
     }
 }
 
-
 @Composable
 fun ConfirmDialog(
-    chat: String,
     onConfirmation: () -> Unit,
     setConfirm: (Boolean) -> Unit,
     imageVector: ImageVector,
     title: String,
+    chatName: String,
     affirm: String,
 ) {
     AlertDialog(
         icon = { Icon(imageVector = imageVector, contentDescription = null) },
         title = { Text(text = title) },
-        text = { Text(text = "Chat: $chat") },
+        text = { Text(text = "Chat: $chatName") },
         onDismissRequest = { setConfirm(false) },
         confirmButton = {
             Button(
@@ -242,6 +222,55 @@ fun Menu(
 }
 
 @Composable
+fun ChatTopBarNeutered(
+    chatName: String,
+    autojoin: Boolean,
+    otherChatStatus: List<ChatStatus>,
+) {
+    val unseen = otherChatStatus.map { it.observedUnseen().sign }.sum()
+    val backBadgeObject = if (unseen > 0) unseen else null
+
+    BackHandler(onBack = {})
+    TopAppBar(
+        title = {
+            Text(
+                text = chatName,
+                style = MaterialTheme.typography.titleLarge,
+            )
+        },
+        navigationIcon = {
+            IconButton(onClick = {}) {
+                BadgedBackArrow(badgeObject = backBadgeObject)
+            }
+        },
+        actions = {
+            ChatTopActionsNeutered(autojoin = autojoin)
+        },
+        colors = TopAppBarDefaults.mediumTopAppBarColors(
+            containerColor = MaterialTheme.colorScheme.primary,
+            titleContentColor = MaterialTheme.colorScheme.onPrimary,
+        ),
+    )
+}
+@Composable
+fun ChatTopActionsNeutered(autojoin: Boolean) {
+    IconButton(onClick = {}) {
+        Icon(
+            imageVector = favoriteIcon(autojoin),
+            contentDescription = "Autojoin",
+            tint = MaterialTheme.colorScheme.onPrimary,
+        )
+    }
+    IconButton(onClick = {}) {
+        Icon(
+            imageVector = Icons.Default.MoreVert,
+            contentDescription = "Menu",
+            tint = MaterialTheme.colorScheme.onPrimary,
+        )
+    }
+}
+
+@Composable
 fun BadgedBackArrow(badgeObject: Any?) {
     if (badgeObject == null)
         BackArrow()
@@ -267,24 +296,11 @@ fun BackArrow() {
     )
 }
 
-private fun favoriteIcon(favorite: Boolean?) =
-    if (favorite == true)
+private fun favoriteIcon(favorite: Boolean) =
+    if (favorite)
         Icons.Default.Favorite
     else
         Icons.Default.FavoriteBorder
-
-private fun favoriteDescription(favorite: Boolean?) =
-    if (favorite == null)
-        null
-    else
-        "Favorite"
-
-@Composable
-private fun favoriteTint(favorite: Boolean?) =
-    if (favorite == null)
-        MaterialTheme.colorScheme.primary // dummy: invisible on primary
-    else
-        MaterialTheme.colorScheme.onPrimary
 
 @Preview
 @Composable
@@ -294,11 +310,13 @@ fun TopBarPreview() {
     ) {
         Scaffold(
             topBar = {
-                TopBar(
-                    title = "#kapow",
-                    nick = "testudo",
-                    favorite = true,
-                    toggleFavorite = {},
+                ChatTopBar(
+                    chatName = "#kapow",
+                    autojoin = true,
+                    toggleAutojoin = {},
+                    onPart = {},
+                    onClearChat = {},
+                    onDeleteChat = {},
                     otherChatStatus = listOf(
                         ChatStatus(
                             name = "pacujo",
@@ -311,7 +329,7 @@ fun TopBarPreview() {
                             seenCount = MutableLiveData(100L),
                         ),
                     ),
-                    back = {},
+                    onBack = {},
                 )
             },
         ) {

@@ -32,11 +32,10 @@ fun Clearing(
     ) {
         Scaffold(
             topBar = {
-                TopBar(
-                    title = chatName,
-                    nick = obsConfiguration.nick,
+                ChatTopBarNeutered(
+                    chatName = chatName,
+                    autojoin = obsConfiguration.amongAutojoins(chatKey),
                     otherChatStatus = otherChats,
-                    back = {},
                 )
                      },
         ) { contentPadding ->

@@ -2,27 +2,32 @@
 
 package net.pacujo.lip
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import java.time.Instant
+import kotlin.math.sign
 
 @Composable
 fun Console(
-    configuration: LiveData<Configuration>,
     contents: LiveData<Array<ProcessedLine>>,
     chatStatus: LiveData<List<ChatStatus>>,
     back: () -> Unit,
 ) {
-    val obsConfiguration = configuration.observed()
     val otherChats = chatStatus.observed().filter { it.name.isNotEmpty() }
 
     Surface(
@@ -30,11 +35,10 @@ fun Console(
     ) {
         Scaffold(
             topBar = {
-                TopBar(
-                    title = "Lip Console",
-                    nick = obsConfiguration.nick,
+                ConsoleTopBar(
+                    chatName = "Lip Console",
                     otherChatStatus = otherChats,
-                    back = back,
+                    onBack = back,
                 )
                      },
         ) {
@@ -49,14 +53,40 @@ fun Console(
     }
 }
 
+@Composable
+fun ConsoleTopBar(
+    chatName: String,
+    otherChatStatus: List<ChatStatus>,
+    onBack: () -> Unit,
+) {
+    val unseen = otherChatStatus.map { it.observedUnseen().sign }.sum()
+    val backBadgeObject = if (unseen > 0) unseen else null
+
+    BackHandler(onBack = onBack)
+    TopAppBar(
+        title = {
+            Text(
+                text = chatName,
+                style = MaterialTheme.typography.titleLarge,
+            )
+        },
+        navigationIcon = {
+            IconButton(onClick = onBack) {
+                BadgedBackArrow(badgeObject = backBadgeObject)
+            }
+        },
+        colors = TopAppBarDefaults.mediumTopAppBarColors(
+            containerColor = MaterialTheme.colorScheme.primary,
+            titleContentColor = MaterialTheme.colorScheme.onPrimary,
+        ),
+    )
+}
+
 @Preview
 @Composable
 fun ConsolePreview() {
     val timestamp = Instant.now()
     Console(
-        configuration = MutableLiveData(
-            Configuration.default().copy(nick = "testudo")
-        ),
         contents = MutableLiveData(
             arrayListOf(
                 LogLine(

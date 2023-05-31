@@ -15,6 +15,9 @@ data class Configuration(
     val useTls: Boolean,
     val autojoins: List<String>,
 ) : Parcelable {
+    fun amongAutojoins(chatKey: String) =
+        autojoins.find { chatName -> chatName.toIRCLower() == chatKey } != null
+
     override fun writeToParcel(parcel: Parcel, flags: Int) {
         val version = 2
         parcel.writeInt(version)
