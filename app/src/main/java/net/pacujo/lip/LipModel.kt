@@ -255,6 +255,7 @@ class LipModel : ViewModel() {
         val done = when (message.cmd) {
             "001" -> rplWelcome001(message)
             "301" -> rplAway301(message)
+            "353" -> rplNamReply353(message)
             "372" -> rplMotd372(message)
             "366", "376" -> true // RPL_ENDOFNAMES, RPL_ENDOFMOTD
             "401" -> rplNoSuchNick401(message)
@@ -317,6 +318,27 @@ class LipModel : ViewModel() {
 
     private fun rplAway301(message: ParsedMessage) =
         simpleChatError(message, "away", Mood.INFO)
+
+    private fun rplNamReply353(message: ParsedMessage): Boolean {
+        if (message.params.size != 4)
+            return false
+        val (_, accessTag, name, nicks) = message.params
+        val access =
+            when (accessTag) {
+                "=" -> "public"
+                "*" -> "private"
+                "@" -> "secret"
+                else -> return false
+            }
+        val chat = chats[name.toIRCLower()] ?: return false
+        chat.updateChannelNicks(nicks)
+        chat.indicateMessage(
+            from = null,
+            text = "access $access, present: $nicks",
+            mood = Mood.LOG,
+        )
+        return true
+    }
 
     private fun rplMotd372(message: ParsedMessage): Boolean {
         if (message.params.isEmpty())
@@ -478,12 +500,26 @@ class LipModel : ViewModel() {
 
                 while (true) {
                     while (true)
-                        process(messages.tryReceive().getOrNull() ?: break)
+                        process(
+                            messages.tryReceive().getOrNull() ?: break
+                        )
                     contents.value = buffer.getAll()
                     status.setTotal(count)
                     process(messages.receive())
                 }
             }
+        }
+
+        fun updateChannelNicks(nicks: String) {
+            nicksPresent.clear()
+            nicksPresent +=
+                nicks.split(' ').map { nick ->
+                    if (nick.isNotEmpty() &&
+                        nick[0].isChannelMembershipPrefix())
+                        nick.substring(1)
+                    else
+                        nick
+                }.filter { validNick(it) }
         }
 
         fun sendPrivMsg(text: String) {
@@ -579,17 +615,23 @@ class LipModel : ViewModel() {
             val points = mutableListOf<Int>()
             val lcase = s.toIRCLower()
             var cursor = 0
-            while (cursor < lcase.length) {
-                val skipped = skipNick(lcase, cursor)
-                if (skipped != null) {
-                    points.add(cursor)
-                    points.add(skipped)
-                    cursor = skipped
-                    continue
+            while (true) {
+                cursor = (cursor until lcase.length).find {
+                    !lcase[it].nickBreak()
+                } ?: break
+                val tail = lcase.substring(cursor)
+                val nick = nicksPresent.find { nick ->
+                    tail.startsWith(nick) &&
+                            (tail == nick || tail[nick.length].nickBreak())
                 }
-                cursor++
-                while (cursor < lcase.length && lcase[cursor].nickBreak())
-                    cursor++
+                if (nick != null) {
+                    points.add(cursor)
+                    cursor += nick.length
+                    points.add(cursor)
+                }
+                cursor = (cursor until lcase.length).find {
+                    lcase[it].nickBreak()
+                } ?: break
             }
             return wedge(s, IRCBold, points)
         }
@@ -607,26 +649,13 @@ class LipModel : ViewModel() {
             return wedge(s, IRCUnderline, points)
         }
 
-        private fun skipNick(lcase: String, index: Int): Int? {
-            val tailLength = lcase.length - index
-            nicksPresent.filter {
-                it.length >= tailLength &&
-                        lcase.substring(index, index + it.length) == it
-            }.forEach {
-                val skipped = index + it.length
-                if (it.length == tailLength || lcase[skipped].nickBreak())
-                    return skipped
-            }
-            return null
-        }
-
         fun indicateMessage(from: String?, text: String, mood: Mood) {
             val timestamp = Instant.now()
             val highlighted = highlight(text)
             val logLine = LogLine(
                 timestamp = timestamp,
                 from = from,
-                line = IRCString(text),
+                line = IRCString(highlighted),
                 mood = mood,
             )
             messages.trySend(logLine)
@@ -645,8 +674,11 @@ fun wedge(s: String, joiner: String, points: Iterable<Int>): String {
     return snippets.joinToString(joiner)
 }
 
+private fun Char.isChannelMembershipPrefix() =
+    "~&@%+".indexOf(this) >= 0
+
 private fun Char.nickBreak() =
-    when (this.category) {
+    when (category) {
         CharCategory.LOWERCASE_LETTER,
         CharCategory.MODIFIER_LETTER,
         CharCategory.OTHER_LETTER,
