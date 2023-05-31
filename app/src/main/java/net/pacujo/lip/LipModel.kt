@@ -22,8 +22,6 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 
-private const val TRACE_DEBUG = false
-
 private const val ConfigFileName = "lipConfig.json"
 private const val ConfigBackupFileName = "$ConfigFileName.bak"
 private const val ConfigNewFileName = "$ConfigFileName.new"
@@ -211,28 +209,24 @@ class LipModel : ViewModel() {
     }
 
     private suspend fun receiver(inputBridge: ReceiveChannel<String>) {
-        monitor(TRACE_DEBUG, "receiver") {
-            try {
+        try {
+            while (true) {
+                var line = inputBridge.receive()
+                val now = Instant.now()
                 while (true) {
-                    var line = inputBridge.receive()
-                    val now = Instant.now()
-                    while (true) {
-                        monitor(TRACE_DEBUG, "actOnLine") {
-                            actOnLine(now, line)
-                        }
-                        val result = inputBridge.tryReceive()
-                        if (result.isFailure)
-                            break
-                        line = result.getOrThrow()
-                    }
+                    actOnLine(now, line)
+                    val result = inputBridge.tryReceive()
+                    if (result.isFailure)
+                        break
+                    line = result.getOrThrow()
                 }
-            } catch (e: ClosedReceiveChannelException) {
-                displayOnConsole(
-                    timestamp = Instant.now(),
-                    line = "Disconnected",
-                    mood = Mood.ERROR,
-                )
             }
+        } catch (e: ClosedReceiveChannelException) {
+            displayOnConsole(
+                timestamp = Instant.now(),
+                line = "Disconnected",
+                mood = Mood.ERROR,
+            )
         }
     }
 
@@ -251,9 +245,7 @@ class LipModel : ViewModel() {
             return
         }
         val message = ParsedMessage(timestamp, prefix, cmd, params)
-        monitor(TRACE_DEBUG, "actOnCommand ${message.cmd}") {
-            actOnCommand(line, message)
-        }
+        actOnCommand(line, message)
     }
 
     private fun actOnCommand(
@@ -266,13 +258,13 @@ class LipModel : ViewModel() {
             "372" -> rplMotd372(message)
             "366", "376" -> true // RPL_ENDOFNAMES, RPL_ENDOFMOTD
             "401" -> rplNoSuchNick401(message)
-            //"JOIN" -> tbd("JOIN")
+            "JOIN" -> joinIndication(message)
             //"MODE" -> tbd("MODE")
             "NICK" -> nick(message)
             //"NOTICE" -> tbd("NOTICE")
             //"PART" -> tbd("PART")
-            "PING" -> ping(message)
-            "PRIVMSG" -> privmsg(message)
+            "PING" -> pingIndication(message)
+            "PRIVMSG" -> privMsgIndication(message)
             else -> false
         }
         if (!done)
@@ -351,7 +343,6 @@ class LipModel : ViewModel() {
             from = null,
             text = "$name $trouble: $explanation",
             mood = mood,
-            notify = false,
         )
         return true
     }
@@ -367,7 +358,38 @@ class LipModel : ViewModel() {
         return true
     }
 
-    private fun ping(message: ParsedMessage): Boolean {
+    private fun joinIndication(message: ParsedMessage): Boolean {
+        if (message.params.size != 1 || message.prefix == null)
+            return false
+        val parts = parsePrefixParts(message.prefix) ?: return false
+        if (parts.nick == null || parts.nick == configuration.value!!.nick)
+            return false
+        val receivers = message.params[0]
+        val address =
+            if (parts.server == null) "${parts.nick}"
+            else {
+                val user = parts.user ?: parts.nick
+                "${parts.nick} ($user@${parts.server})"
+            }
+        distribute(receivers) { chatName ->
+            val info = "$address joined $chatName"
+            val chatKey = chatName.toIRCLower()
+            val chat = chats[chatKey]
+            if (chat == null)
+                displayOnConsole(message.timestamp, info, Mood.LOG)
+            else {
+                chat.indicateMessage(
+                    from = null,
+                    text = info,
+                    mood = Mood.LOG,
+                )
+                chat.nicksPresent += chatKey
+            }
+        }
+        return true
+    }
+
+    private fun pingIndication(message: ParsedMessage): Boolean {
         return when (message.params.size) {
             1 -> {
                 val s1 = message.params[0]
@@ -385,7 +407,7 @@ class LipModel : ViewModel() {
         }
     }
 
-    private fun privmsg(message: ParsedMessage): Boolean {
+    private fun privMsgIndication(message: ParsedMessage): Boolean {
         if (message.params.size != 2 || message.prefix == null)
             return false
         val parts = parsePrefixParts(message.prefix)
@@ -394,10 +416,8 @@ class LipModel : ViewModel() {
         val (receivers, text) = message.params
         if (text.isNotEmpty() && text[0] == CtrlA)
             return doCTCP(message, text)
-        monitor(TRACE_DEBUG, "distribute") {
-            distribute(receivers) {
-                post(parts, it, text)
-            }
+        distribute(receivers) {
+            post(parts, it, text)
         }
         return true
     }
@@ -413,7 +433,6 @@ class LipModel : ViewModel() {
             return
         }
         val sender = parts.nick!!
-        logDebug(TRACE_DEBUG, "sender: $sender")
         val chatName =
             if (validNick(receiver)) {
                 if (receiver != configuration.value!!.nick)
@@ -427,7 +446,7 @@ class LipModel : ViewModel() {
             displayOnConsole(Instant.now(), "Too many chats", Mood.ERROR)
             return
         }
-        chat.indicateMessage(sender, text, Mood.THEIRS, notify = true)
+        chat.indicateMessage(sender, text, Mood.THEIRS)
     }
 
     private fun distribute(receivers: String, func: (String) -> Unit) =
@@ -440,7 +459,7 @@ class LipModel : ViewModel() {
         val contents = MutableLiveData(arrayOf<ProcessedLine>())
         val status = ChatStatus(name)
         private val messages = Channel<LogLine>(100)
-        private val nicksPresent = mutableSetOf<String>()
+        val nicksPresent = mutableSetOf<String>()
 
         override fun toString() = "Chat(\"$name\", \"$key\")"
 
@@ -474,7 +493,6 @@ class LipModel : ViewModel() {
                 from = configuration.value!!.nick,
                 text = archived,
                 mood = Mood.MINE,
-                notify = false,
             )
             command("PRIVMSG $name :$text")
         }
@@ -487,18 +505,16 @@ class LipModel : ViewModel() {
 
         fun toggleAutojoin() {
             check(state.value == AppState.CHAT)
-            if (isFavorite())
-                turnOffFavorite()
+            if (amongAutojoins())
+                removeFromAutojoins()
             else
-                turnOnFavorite()
+                addToAutojoins()
         }
 
-        fun isFavorite() =
-            configuration.value!!.autojoins
-                .map { it.toIRCLower() }.contains(key)
+        fun amongAutojoins() = configuration.value!!.amongAutojoins(key)
 
-        fun turnOnFavorite() {
-            if (!isFavorite()) {
+        fun addToAutojoins() {
+            if (!amongAutojoins()) {
                 val currentConfiguration = configuration.value!!
                 val newAutojoins = currentConfiguration.autojoins + name
                 updateConfiguration(
@@ -507,7 +523,7 @@ class LipModel : ViewModel() {
             }
         }
 
-        fun turnOffFavorite() {
+        fun removeFromAutojoins() {
             val currentConfiguration = configuration.value!!
             val newAutojoins =
                 currentConfiguration.autojoins.filter { it.toIRCLower() != key }
@@ -540,7 +556,7 @@ class LipModel : ViewModel() {
             }
             viewModelScope.launchGuarded {
                 expungeJob.join()
-                turnOffFavorite()
+                removeFromAutojoins()
                 chats.remove(key)
                 chatInfo.value = generateChatInfo()
                 state.value = AppState.JOIN
@@ -551,7 +567,7 @@ class LipModel : ViewModel() {
             check(state.value == AppState.CHAT)
             if (validChannelName(name))
                 command("PART $name")
-            turnOffFavorite()
+            removeFromAutojoins()
             chats.remove(key)
             chatInfo.value = generateChatInfo()
             state.value = AppState.JOIN
@@ -604,12 +620,7 @@ class LipModel : ViewModel() {
             return null
         }
 
-        fun indicateMessage(
-            from: String?,
-            text: String,
-            mood: Mood,
-            notify: Boolean,
-        ) {
+        fun indicateMessage(from: String?, text: String, mood: Mood) {
             val timestamp = Instant.now()
             val highlighted = highlight(text)
             val logLine = LogLine(
@@ -680,13 +691,11 @@ private suspend fun Connection.transmitLine(line: String) =
     transmit("$line\r\n")
 
 private suspend fun Connection.transmit(snippet: String) {
-    monitor(TRACE_DEBUG, "transmitting ${snippet.length}") {
-        val success = writeAll(ByteBuffer.wrap(snippet.toByteArray())) {
-            write(it)
-        }
-        if (!success)
-            throw IOException("writeAll failure")
+    val success = writeAll(ByteBuffer.wrap(snippet.toByteArray())) {
+        write(it)
     }
+    if (!success)
+        throw IOException("writeAll failure")
 }
 
 fun CoroutineScope.launchGuarded(
