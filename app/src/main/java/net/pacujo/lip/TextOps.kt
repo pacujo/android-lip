@@ -18,11 +18,11 @@ fun Char.isAsciiAlpha() =
 data class IRCString(val string: String)
 
 const val CtrlA = ('A'.code and 0x1f).toChar()
-private const val CtrlB = ('B'.code and 0x1f).toChar()
-private const val CtrlC = ('C'.code and 0x1f).toChar()
-private const val CtrlO = ('O'.code and 0x1f).toChar()
-private const val CtrlR = ('R'.code and 0x1f).toChar()
-private const val CtrlU = ('U'.code and 0x1f).toChar()
+const val CtrlB = ('B'.code and 0x1f).toChar()
+const val CtrlC = ('C'.code and 0x1f).toChar()
+const val CtrlO = ('O'.code and 0x1f).toChar()
+const val CtrlR = ('R'.code and 0x1f).toChar()
+const val CtrlU = ('U'.code and 0x1f).toChar()
 
 const val IRCBold = CtrlB.toString()
 const val IRCColor = CtrlC.toString()

@@ -1,13 +1,13 @@
 package net.pacujo.lip
 
-import android.util.Patterns
+import androidx.core.util.PatternsCompat.WEB_URL
 
 fun findUrl(s: String, index: Int): Pair<Int, Int>? {
     var urlStart = index
     while (true) {
         val urlEnd = skipUrl(s, urlStart)
         if (urlEnd != null &&
-            Patterns.WEB_URL.matcher(s.substring(index, urlEnd)).matches())
+            WEB_URL.matcher(s.deformat(urlStart, urlEnd)).matches())
             return Pair(urlStart, urlEnd)
         while (true) {
             if (urlStart == s.length)
@@ -45,11 +45,15 @@ private fun skipUrl(s: String, index: Int): Int? {
     return null
 }
 
+private val formatChars = setOf(CtrlB, CtrlR, CtrlU, CtrlO, CtrlC)
+
 private fun atFinalJam(s: String, index: Int): Boolean {
-    for (c in s.substring(index)) {
+    for (i in index until s.length) {
+        val c = s[i]
         when (c) {
             ' ', '<', '>' -> return true
             ')', '.', ',', ':', ';', '!', '?', '"', '\'' -> continue
+            in formatChars -> continue
             in ' '..'~' -> return false
         }
         return when (c.category) {
@@ -72,11 +76,13 @@ private fun atFinalJam(s: String, index: Int): Boolean {
     return true
 }
 
-private fun String.skip(s: String, index: Int?) =
-    fold(index) { i, c -> c.skip(s, i) }
+private fun String.skip(s: String, index: Int?): Int? {
+    index ?: return null
+    withIndex().find { (i, c) ->
+        s.getOrNull(index + i) != c
+    } ?: return index + length
+    return null
+}
 
-private fun Char.skip(s: String, index: Int?) =
-    if (index == null || index >= s.length || s[index] != this)
-        null
-    else
-        index + 1
+private fun String.deformat(start: Int, end: Int) =
+    substring(start, end).filter { it !in formatChars }

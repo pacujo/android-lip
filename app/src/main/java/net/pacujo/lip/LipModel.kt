@@ -635,20 +635,6 @@ class LipModel : ViewModel() {
             }
             return wedge(s, IRCBold, points)
         }
-
-        private fun highlightURLs(s: String): String {
-            val points = mutableListOf<Int>()
-            var cursor = 0
-            while (true) {
-                val range = findUrl(s, cursor) ?: break
-                val (start, end) = range
-                points.add(start)
-                points.add(end)
-                cursor = end
-            }
-            return wedge(s, IRCUnderline, points)
-        }
-
         fun indicateMessage(from: String?, text: String, mood: Mood) {
             val timestamp = Instant.now()
             val highlighted = highlight(text)
@@ -662,6 +648,20 @@ class LipModel : ViewModel() {
         }
     }
 }
+
+private fun highlightURLs(s: String): String {
+    val points = mutableListOf<Int>()
+    var cursor = 0
+    while (true) {
+        val range = findUrl(s, cursor) ?: break
+        val (start, end) = range
+        points.add(start)
+        points.add(end)
+        cursor = end
+    }
+    return wedge(s, IRCUnderline, points)
+}
+
 
 fun wedge(s: String, joiner: String, points: Iterable<Int>): String {
     var prev = 0
