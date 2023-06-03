@@ -91,12 +91,9 @@ fun ChatTopActions(
     onClearChat: () -> Unit = {},
     onDeleteChat: () -> Unit = {},
 ) {
-    val (expanded, setExpanded) =
-        remember { mutableStateOf(false) }
-    val (confirmClear, setConfirmClear) =
-        remember { mutableStateOf(false) }
-    val (confirmDelete, setConfirmDelete) =
-        remember { mutableStateOf(false) }
+    val (expanded, setExpanded) = remember { mutableStateOf(false) }
+    val (confirmClear, setConfirmClear) = remember { mutableStateOf(false) }
+    val (confirmDelete, setConfirmDelete) = remember { mutableStateOf(false) }
 
     IconButton(onClick = toggleAutojoin) {
         Icon(

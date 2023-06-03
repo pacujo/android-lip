@@ -9,23 +9,31 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.LiveData
@@ -52,28 +60,33 @@ fun ChatView(
     val otherChats =
         chatStatus.observed().filter { it.name.toIRCLower() != chatKey }
 
-    var message by rememberSaveable { mutableStateOf("") }
+    val (expanded, setExpanded) = remember { mutableStateOf(false) }
+
+    var message by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue())
+    }
 
     val toastContext = LocalContext.current
 
     fun send() {
-        if (message.startsWith("//"))
-            onSend(message.substring(1))
+        if (message.text.startsWith("//"))
+            onSend(message.text.substring(1))
         else
-            onSend(message)
-        message = ""
+            onSend(message.text)
+        message = TextFieldValue()
     }
 
-    fun goodToSend() = message.isNotBlank() &&
-            (message[0] != '/' || message.startsWith("//"))
+    fun goodToSend() = message.text.isNotBlank() &&
+            (message.text[0] != '/' || message.text.startsWith("//"))
 
-    fun setMessage(text: String) {
+    fun setMessage(value: TextFieldValue) {
         when {
-            text.isEmpty() || text.last() != '\n' -> message = text
+            value.text.isEmpty() || value.text.last() != '\n' ->
+                message = value
 
             goodToSend() -> send()
 
-            message.isBlank() ->
+            message.text.isBlank() ->
                 Toast.makeText(
                     toastContext,
                     "Blank message not sent",
@@ -87,6 +100,16 @@ fun ChatView(
                     Toast.LENGTH_SHORT,
                 ).show()
         }
+    }
+
+    fun insertToMessage(snippet: String) {
+        val head = message.text.substring(0, message.selection.start)
+        val tail = message.text.substring(message.selection.end)
+        message =
+            message.copy(
+                text = head + snippet + tail,
+                selection = TextRange(head.length + snippet.length),
+            )
     }
 
     Surface(
@@ -119,17 +142,31 @@ fun ChatView(
                         .padding(UNIVERSAL_PADDING),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    Button(
+                        modifier = Modifier.size(size = 40.dp),
+                        colors = ButtonDefaults.textButtonColors(),
+                        contentPadding = PaddingValues(0.dp),
+                        onClick = { setExpanded(true) },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Build,
+                            contentDescription = "Join",
+                        )
+                        EditMenu(expanded, setExpanded, ::insertToMessage)
+                    }
+                    Spacer(
+                        modifier = Modifier.padding(UNIVERSAL_PADDING / 2),
+                    )
                     TextEntry(
                         modifier = Modifier.weight(1f),
                         label = "${obsConfiguration.nick} ⮕ $chatName",
                         value = message,
-                        setter = { setMessage(it) },
+                        setter = ::setMessage,
                     )
                     Spacer(modifier = Modifier.padding(UNIVERSAL_PADDING))
                     Button(
                         enabled = goodToSend(),
                         modifier = Modifier.size(size = 40.dp),
-                        shape = CircleShape,
                         contentPadding = PaddingValues(0.dp),
                         onClick = ::send,
                     ) {
@@ -141,6 +178,41 @@ fun ChatView(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun EditMenu(
+    expanded: Boolean,
+    setExpanded: (Boolean) -> Unit,
+    insertMarkup: (String) -> Unit,
+) {
+    val textIconScale = 1.5f
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = { setExpanded(false) },
+    ) {
+        listOf(
+            BoldMarkup to "Toggle boldface",
+            ItalicMarkup to "Toggle Italic",
+            UnderlineMarkup to "Toggle underline",
+            ColorMarkup to "Toggle color",
+            OriginalMarkup to "Reset style",
+        ).forEach { (markup, label) ->
+            DropdownMenuItem(
+                leadingIcon = {
+                    Text(
+                        modifier = Modifier.scale(textIconScale),
+                        text = markup,
+                    )
+                },
+                text = { Text(text = label) },
+                onClick = {
+                    setExpanded(false)
+                    insertMarkup(markup)
+                },
+            )
         }
     }
 }

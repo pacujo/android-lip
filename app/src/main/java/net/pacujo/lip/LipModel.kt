@@ -355,7 +355,7 @@ class LipModel : ViewModel() {
         chat.updateChannelNicks(nicks)
         chat.indicateMessage(
             from = null,
-            text = "access $access, present: $nicks",
+            text = IRCString("access $access, present: $nicks"),
             mood = Mood.LOG,
         )
         return true
@@ -384,7 +384,7 @@ class LipModel : ViewModel() {
         val chat = chats[name.toIRCLower()] ?: return false
         chat.indicateMessage(
             from = null,
-            text = "$name $trouble: $explanation",
+            text = IRCString("$name $trouble: $explanation"),
             mood = mood,
         )
         return true
@@ -423,7 +423,7 @@ class LipModel : ViewModel() {
             else {
                 chat.indicateMessage(
                     from = null,
-                    text = info,
+                    text = IRCString(info),
                     mood = Mood.LOG,
                 )
                 chat.nicksPresent += chatKey
@@ -489,7 +489,7 @@ class LipModel : ViewModel() {
             displayOnConsole(Instant.now(), "Too many chats", Mood.ERROR)
             return
         }
-        chat.indicateMessage(sender, text, Mood.THEIRS)
+        chat.indicateMessage(sender, IRCString(text), Mood.THEIRS)
     }
 
     private fun distribute(receivers: String, func: (String) -> Unit) =
@@ -545,13 +545,14 @@ class LipModel : ViewModel() {
 
         fun sendPrivMsg(text: String) {
             check(state.value == AppState.CHAT)
-            val archived = text // markupToArchive(text)
+            val archived = markupToArchive(text)
             indicateMessage(
                 from = configuration.value!!.nick,
                 text = archived,
                 mood = Mood.MINE,
             )
-            command("PRIVMSG $name :$text")
+            val wired = markupToWire(text)
+            command("PRIVMSG $name :${wired.string}")
         }
 
         fun leave() {
@@ -630,11 +631,11 @@ class LipModel : ViewModel() {
             state.value = AppState.JOIN
         }
 
-        private fun highlight(s: String) = highlightURLs(highlightNicks(s))
+        private fun highlight(s: IRCString) = highlightURLs(highlightNicks(s))
 
-        private fun highlightNicks(s: String): String {
+        private fun highlightNicks(s: IRCString): IRCString {
             val points = mutableListOf<Int>()
-            val lcase = s.toIRCLower()
+            val lcase = s.string.toIRCLower()
             var cursor = 0
             while (true) {
                 cursor = (cursor until lcase.length).find {
@@ -654,15 +655,15 @@ class LipModel : ViewModel() {
                     lcase[it].nickBreak()
                 } ?: break
             }
-            return wedge(s, IRCBold, points)
+            return IRCString(wedge(s.string, IRCBold, points))
         }
-        fun indicateMessage(from: String?, text: String, mood: Mood) {
+        fun indicateMessage(from: String?, text: IRCString, mood: Mood) {
             val timestamp = Instant.now()
             val highlighted = highlight(text)
             val logLine = LogLine(
                 timestamp = timestamp,
                 from = from,
-                line = IRCString(highlighted),
+                line = highlighted,
                 mood = mood,
             )
             messages.trySend(logLine)
@@ -670,7 +671,7 @@ class LipModel : ViewModel() {
     }
 }
 
-private fun highlightURLs(s: String): String {
+private fun highlightURLs(s: IRCString): IRCString {
     val points = mutableListOf<Int>()
     var cursor = 0
     while (true) {
@@ -680,19 +681,7 @@ private fun highlightURLs(s: String): String {
         points.add(end)
         cursor = end
     }
-    return wedge(s, IRCUnderline, points)
-}
-
-
-fun wedge(s: String, joiner: String, points: Iterable<Int>): String {
-    var prev = 0
-    val snippets = mutableListOf<String>()
-    for (point in points) {
-        snippets.add(s.substring(prev, point))
-        prev = point
-    }
-    snippets.add(s.substring(prev))
-    return snippets.joinToString(joiner)
+    return IRCString(wedge(s.string, IRCUnderline, points))
 }
 
 private fun Char.isChannelMembershipPrefix() =

@@ -144,3 +144,44 @@ fun AnnotatedString.markParagraphStyle(
         }
     }
 }
+
+fun wedge(s: String, joiner: String, points: Iterable<Int>): String {
+    var prev = 0
+    val snippets = mutableListOf<String>()
+    for (point in points) {
+        snippets.add(s.substring(prev, point))
+        prev = point
+    }
+    snippets.add(s.substring(prev))
+    return snippets.joinToString(joiner)
+}
+
+const val BoldMarkup = "🄱"
+const val ItalicMarkup = "🄸"
+const val UnderlineMarkup = "🅄"
+const val OriginalMarkup = "🄾"
+const val ColorMarkup = "🄲"
+const val HideMarkup = "🗝"
+
+fun markupToArchive(text: String) =
+    IRCString(
+        markupSimple(text)
+            .split(HideMarkup)
+            .withIndex().filter { it.index and 1 == 0 }
+            .map { it.value }
+            .joinToString(HideMarkup)
+    )
+
+fun markupToWire(text: String) =
+    IRCString(
+        markupSimple(text)
+            .split(HideMarkup)
+            .joinToString("")
+    )
+
+private fun markupSimple(text: String) =
+    text.split(BoldMarkup).joinToString(IRCBold)
+        .split(ItalicMarkup).joinToString(IRCItalic)
+        .split(UnderlineMarkup).joinToString(IRCUnderline)
+        .split(OriginalMarkup).joinToString(IRCOriginal)
+        .split(ColorMarkup).joinToString(IRCColor)
