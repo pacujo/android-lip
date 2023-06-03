@@ -226,6 +226,7 @@ fun EditMenu(
             },
         )
     }
+
     if (settingColors)
         SetColors(
             onDismiss = { settingColors = false },
@@ -255,6 +256,8 @@ fun EditMenu(
             )
             Divider()
             StyleMenuItem(OriginalMarkup, "Reset style")
+            Divider()
+            StyleMenuItem(HideMarkup, "Toggle hiding")
         }
 }
 
