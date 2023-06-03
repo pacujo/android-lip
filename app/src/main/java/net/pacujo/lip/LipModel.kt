@@ -183,6 +183,8 @@ class LipModel : ViewModel() {
                 val readerJob = viewModelScope.launchGuarded(Dispatchers.IO) {
                     connectionBridge.receive().lineReader(inputBridge)
                 }
+                for (chat in chats.values)
+                    chat.join()
                 receiver(inputBridge)
                 transmitJob.cancel()
                 readerJob.cancel()
@@ -281,21 +283,15 @@ class LipModel : ViewModel() {
             "366", "376" -> true // RPL_ENDOFNAMES, RPL_ENDOFMOTD
             "401" -> rplNoSuchNick401(message)
             "JOIN" -> joinIndication(message)
-            //"MODE" -> tbd("MODE")
-            "NICK" -> nick(message)
-            //"NOTICE" -> tbd("NOTICE")
-            //"PART" -> tbd("PART")
+            "NICK" -> nickIndication(message)
+            "NOTICE" -> noticeIndication(message)
+            "PART" -> partIndication(message)
             "PING" -> pingIndication(message)
             "PRIVMSG" -> privMsgIndication(message)
             else -> false
         }
         if (!done)
             displayOnConsole(message.timestamp, line, Mood.LOG)
-    }
-
-    private fun tbd(s: String): Boolean {
-        logWarning("TBD: $s")
-        return false
     }
 
     private fun displayOnConsole(
@@ -390,7 +386,7 @@ class LipModel : ViewModel() {
         return true
     }
 
-    private fun nick(message: ParsedMessage): Boolean {
+    private fun nickIndication(message: ParsedMessage): Boolean {
         if (message.params.size != 1 || message.prefix == null)
             return false
         val newNick = message.params[0]
@@ -432,6 +428,36 @@ class LipModel : ViewModel() {
         return true
     }
 
+    private fun partIndication(message: ParsedMessage): Boolean {
+        if (message.params.isEmpty() || message.prefix == null)
+            return false
+        val parts = parsePrefixParts(message.prefix) ?: return false
+        val receivers = message.params[0]
+        val address =
+            if (parts.server == null) "${parts.nick}"
+            else {
+                val user = parts.user ?: parts.nick
+                "${parts.nick} ($user@${parts.server})"
+            }
+        distribute(receivers) { chatName ->
+            val info = "$address parted from $chatName"
+            val chatKey = chatName.toIRCLower()
+            val chat = chats[chatKey]
+            if (chat == null)
+                displayOnConsole(message.timestamp, info, Mood.LOG)
+            else {
+                chat.indicateMessage(
+                    from = null,
+                    text = IRCString(info),
+                    mood = Mood.LOG,
+                )
+                /* Don't remove the nick from chat.nicksPresent; the nick is
+                 * likely to rejoin. */
+            }
+        }
+        return true
+    }
+
     private fun pingIndication(message: ParsedMessage): Boolean {
         return when (message.params.size) {
             1 -> {
@@ -453,20 +479,41 @@ class LipModel : ViewModel() {
     private fun privMsgIndication(message: ParsedMessage): Boolean {
         if (message.params.size != 2 || message.prefix == null)
             return false
-        val parts = parsePrefixParts(message.prefix)
-        if (parts == null || parts.server != null)
+        val parts = parsePrefixParts(message.prefix) ?: return false
+        if (parts.server != null)
             return false
         val (receivers, text) = message.params
         if (text.isNotEmpty() && text[0] == CtrlA)
-            return doCTCP(message, text)
+            return doCTCP(text)
         distribute(receivers) {
             post(parts, it, text)
         }
         return true
     }
 
-    private fun doCTCP(message: ParsedMessage, text: String): Boolean {
-        return tbd("CTCP")
+    private fun doCTCP(text: String) =
+        when (text) {
+            "${CtrlA}VERSION${CtrlA}" -> doCTCPVersion()
+
+            else -> false
+        }
+
+    private fun doCTCPVersion(): Boolean {
+        command(":${CtrlA}VERSION :net.pacujo.lip 0.0.1${CtrlA}")
+        return true
+    }
+
+    private fun noticeIndication(message: ParsedMessage): Boolean {
+        if (message.params.size != 2 || message.prefix == null)
+            return false
+        val parts = parsePrefixParts(message.prefix) ?: return false
+        if (parts.server != null)
+            return false
+        val (receivers, text) = message.params
+        distribute(receivers) {
+            post(parts, it, text)
+        }
+        return true
     }
 
     private fun post(parts: PrefixParts, receiver: String, text: String) {
@@ -509,8 +556,7 @@ class LipModel : ViewModel() {
         init {
             viewModelScope.launchGuarded {
                 val buffer = journal.replay(name)
-                if (!validNick(name))
-                    command("JOIN $name\r\n")
+                join()
                 var count = 0L
 
                 fun process(logLine: LogLine) {
@@ -569,9 +615,9 @@ class LipModel : ViewModel() {
                 addToAutojoins()
         }
 
-        fun amongAutojoins() = configuration.value!!.amongAutojoins(key)
+        private fun amongAutojoins() = configuration.value!!.amongAutojoins(key)
 
-        fun addToAutojoins() {
+        private fun addToAutojoins() {
             if (!amongAutojoins()) {
                 val currentConfiguration = configuration.value!!
                 val newAutojoins = currentConfiguration.autojoins + name
@@ -581,7 +627,7 @@ class LipModel : ViewModel() {
             }
         }
 
-        fun removeFromAutojoins() {
+        private fun removeFromAutojoins() {
             val currentConfiguration = configuration.value!!
             val newAutojoins =
                 currentConfiguration.autojoins.filter { it.toIRCLower() != key }
@@ -629,6 +675,11 @@ class LipModel : ViewModel() {
             chats.remove(key)
             chatInfo.value = generateChatInfo()
             state.value = AppState.JOIN
+        }
+        
+        fun join() {
+            if (validChannelName(name))
+                command("JOIN $name")
         }
 
         private fun highlightNicks(s: IRCString): IRCString {
