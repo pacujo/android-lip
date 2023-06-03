@@ -193,7 +193,7 @@ class LipModel : ViewModel() {
                 val gracePeriod = gracePeriodInMinutes * minuteInMilliseconds
                 displayOnConsole(
                     timestamp = Instant.now(),
-                    line = "Backing off for ${gracePeriodInMinutes} minutes",
+                    line = "Backing off for $gracePeriodInMinutes minutes",
                     mood = Mood.INFO,
                 )
                 delay(gracePeriod)
@@ -631,8 +631,6 @@ class LipModel : ViewModel() {
             state.value = AppState.JOIN
         }
 
-        private fun highlight(s: IRCString) = highlightURLs(highlightNicks(s))
-
         private fun highlightNicks(s: IRCString): IRCString {
             val points = mutableListOf<Int>()
             val lcase = s.string.toIRCLower()
@@ -659,7 +657,7 @@ class LipModel : ViewModel() {
         }
         fun indicateMessage(from: String?, text: IRCString, mood: Mood) {
             val timestamp = Instant.now()
-            val highlighted = highlight(text)
+            val highlighted = highlightNicks(text)
             val logLine = LogLine(
                 timestamp = timestamp,
                 from = from,
@@ -669,19 +667,6 @@ class LipModel : ViewModel() {
             messages.trySend(logLine)
         }
     }
-}
-
-private fun highlightURLs(s: IRCString): IRCString {
-    val points = mutableListOf<Int>()
-    var cursor = 0
-    while (true) {
-        val range = findUrl(s, cursor) ?: break
-        val (start, end) = range
-        points.add(start)
-        points.add(end)
-        cursor = end
-    }
-    return IRCString(wedge(s.string, IRCUnderline, points))
 }
 
 private fun Char.isChannelMembershipPrefix() =

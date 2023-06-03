@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -30,8 +31,8 @@ const val IRCOriginal = CtrlO.toString()
 const val IRCItalic = CtrlR.toString()
 const val IRCUnderline = CtrlU.toString()
 
-fun IRCString.toAnnotatedString(): AnnotatedString {
-    return buildAnnotatedString {
+fun IRCString.toAnnotatedString() =
+    buildAnnotatedString {
         var style = IRCTextStyle()
         var p = 0
         var q = 0
@@ -58,7 +59,21 @@ fun IRCString.toAnnotatedString(): AnnotatedString {
         append(string.substring(startIndex = p))
         pop()
     }
-}
+fun annotateWithUrl(s: AnnotatedString, range: TextRange) =
+    buildAnnotatedString {
+        append(s)
+        addStyle(
+            style = SpanStyle(textDecoration = TextDecoration.Underline),
+            start = range.start,
+            end = range.end,
+        )
+        addStringAnnotation(
+            tag = "URL",
+            annotation = s.substring(range.start, range.end),
+            start = range.start,
+            end = range.end,
+        )
+    }
 
 private val Brown = Color(red = 150, green = 75, blue = 0)
 private val Purple = Color(red = 160, green = 32, blue = 240)
@@ -145,13 +160,12 @@ fun AnnotatedString.markMood(mood: Mood): AnnotatedString {
 
 fun AnnotatedString.markParagraphStyle(
     paragraphStyle: ParagraphStyle,
-): AnnotatedString {
-    return buildAnnotatedString {
+) =
+    buildAnnotatedString {
         withStyle(style = paragraphStyle) {
             append(this@markParagraphStyle)
         }
     }
-}
 
 fun wedge(s: String, joiner: String, points: Iterable<Int>): String {
     var prev = 0

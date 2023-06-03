@@ -5,13 +5,16 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ParagraphStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -20,12 +23,18 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import java.time.Instant
 
+data class ProcessedLine(
+    val logLine: LogLine?,
+    val annotatedString: AnnotatedString,
+)
+
 @Composable
 fun Log(
     modifier: Modifier = Modifier,
     contents: LiveData<Array<ProcessedLine>>,
     contentPadding: PaddingValues = PaddingValues(0.dp)
 ) {
+    val uriHandler = LocalUriHandler.current
     val obsContents = contents.observed()
     val listState = rememberLazyListState()
     LaunchedEffect(obsContents) {
@@ -40,13 +49,23 @@ fun Log(
         contentPadding = contentPadding,
     ) {
         items(obsContents.size) {
-            Text(
-                text = obsContents[it].second.markParagraphStyle(
+            val annotatedString = obsContents[it].annotatedString
+            ClickableText(
+                text = annotatedString.markParagraphStyle(
                     ParagraphStyle(
                         textIndent = TextIndent(restLine = 10.sp),
                     ),
                 ),
-                color = MaterialTheme.colorScheme.onBackground,
+                onClick = { offset ->
+                    annotatedString
+                        .getStringAnnotations("URL", offset, offset)
+                        .firstOrNull()?.let { annotation ->
+                            uriHandler.openUri(annotation.item)
+                        }
+                },
+                style = TextStyle(
+                    color = MaterialTheme.colorScheme.onBackground
+                ),
             )
         }
     }

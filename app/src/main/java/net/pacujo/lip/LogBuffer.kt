@@ -7,8 +7,6 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-typealias ProcessedLine = Pair<LogLine?, AnnotatedString>
-
 class LogBuffer(val capacity: Int = 1000) {
     private val dates = sortedMapOf<String, MutableList<ProcessedLine>>()
 
@@ -29,7 +27,7 @@ class LogBuffer(val capacity: Int = 1000) {
                     return value[index - cursor - 1]
                 val markedUpDate =
                     IRCString(key).toAnnotatedString().markMood(Mood.LOG)
-                return null to markedUpDate
+                return ProcessedLine(null, markedUpDate)
             }
             cursor += value.size + 1
         }
@@ -48,12 +46,15 @@ class LogBuffer(val capacity: Int = 1000) {
         val author =
             AnnotatedString(logLine.from?.plus(">") ?: "")
                 .markMood(Mood.INFO)
-        val payload =
+        var payload =
             logLine.line
                 .toAnnotatedString()
                 .markMood(logLine.mood)
+        findUrls(payload).forEach { range ->
+            payload = annotateWithUrl(payload, range)
+        }
         val displayLine = todPrefix + author + payload
-        val value = logLine to displayLine
+        val value = ProcessedLine(logLine, displayLine)
         if (!dates.contains(key))
             dates[key] = arrayListOf()
         dates[key]?.add(value)
