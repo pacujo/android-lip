@@ -52,14 +52,6 @@ fun Log(
     }
 }
 
-data class IRCTextStyle(
-    val bold: Boolean = false,
-    val underline: Boolean = false,
-    val italic: Boolean = false,
-    val fgColor: Int? = null,
-    val bgColor: Int? = null,
-)
-
 @Preview
 @Composable
 fun LogPreview() {

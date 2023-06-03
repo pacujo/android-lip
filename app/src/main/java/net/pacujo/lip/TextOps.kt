@@ -89,6 +89,14 @@ fun ircColor(colorCode: Int?) =
         else -> Color.Unspecified
     }
 
+private data class IRCTextStyle(
+    val bold: Boolean = false,
+    val underline: Boolean = false,
+    val italic: Boolean = false,
+    val fgColor: Int? = null,
+    val bgColor: Int? = null,
+)
+
 private fun IRCTextStyle.toSpanStyle() =
     SpanStyle(
         fontWeight = if (bold) FontWeight.Bold else null,
@@ -168,8 +176,7 @@ fun markupToArchive(text: String) =
         markupSimple(text)
             .split(HideMarkup)
             .withIndex().filter { it.index and 1 == 0 }
-            .map { it.value }
-            .joinToString(HideMarkup)
+            .joinToString(HideMarkup) { it.value }
     )
 
 fun markupToWire(text: String) =
