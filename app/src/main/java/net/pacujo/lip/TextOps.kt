@@ -68,7 +68,7 @@ private val LightCyan = Color(red = 224, green = 255, blue = 255)
 private val LightBlue = Color(red = 173, green = 216, blue = 230)
 private val Pink = Color(red = 255, green = 192, blue = 203)
 
-private fun ircColor(colorCode: Int?) =
+fun ircColor(colorCode: Int?) =
     when (colorCode) {
         0 -> Color.White
         1 -> Color.Black

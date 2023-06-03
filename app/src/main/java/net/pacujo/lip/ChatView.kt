@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package net.pacujo.lip
 
 import android.widget.Toast
@@ -14,14 +16,19 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,9 +40,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import java.time.Instant
@@ -189,31 +198,213 @@ fun EditMenu(
     insertMarkup: (String) -> Unit,
 ) {
     val textIconScale = 1.5f
-    DropdownMenu(
-        expanded = expanded,
-        onDismissRequest = { setExpanded(false) },
-    ) {
-        listOf(
-            BoldMarkup to "Toggle boldface",
-            ItalicMarkup to "Toggle Italic",
-            UnderlineMarkup to "Toggle underline",
-            ColorMarkup to "Toggle color",
-            OriginalMarkup to "Reset style",
-        ).forEach { (markup, label) ->
+    var settingColors by remember { mutableStateOf(false) }
+
+    fun chooseColors(fgColor: Int, bgColor: Int) {
+        val colorCode =
+            when {
+                fgColor < 0 -> ""
+                bgColor < 0 -> "%02d".format(fgColor)
+                else -> "%d,%02d".format(fgColor, bgColor)
+            }
+        insertMarkup("$ColorMarkup$colorCode")
+    }
+
+    @Composable
+    fun StyleMenuItem(markup: String, label: String) {
+        DropdownMenuItem(
+            leadingIcon = {
+                Text(
+                    modifier = Modifier.scale(textIconScale),
+                    text = markup,
+                )
+            },
+            text = { Text(text = label) },
+            onClick = {
+                setExpanded(false)
+                insertMarkup(markup)
+            },
+        )
+    }
+    if (settingColors)
+        SetColors(
+            onDismiss = { settingColors = false },
+            chooseColors = ::chooseColors,
+        )
+    else
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { setExpanded(false) },
+        ) {
+            StyleMenuItem(BoldMarkup, "Toggle boldface")
+            StyleMenuItem(ItalicMarkup, "Toggle italic")
+            StyleMenuItem(UnderlineMarkup, "Toggle underline")
             DropdownMenuItem(
                 leadingIcon = {
                     Text(
                         modifier = Modifier.scale(textIconScale),
-                        text = markup,
+                        text = ColorMarkup,
                     )
                 },
-                text = { Text(text = label) },
+                text = { Text(text = "Set colors...") },
                 onClick = {
                     setExpanded(false)
-                    insertMarkup(markup)
+                    settingColors = true
+                    //insertMarkup(markup)
                 },
             )
+            Divider()
+            StyleMenuItem(OriginalMarkup, "Reset style")
         }
+}
+
+private val colors = arrayOf(
+    "White", "Black", "Blue", "Green", "Red", "Brown", "Purple", "Orange",
+    "Yellow", "Light green", "Cyan", "Light cyan", "Light blue", "Pink",
+    "Grey", "Light grey",
+)
+
+@Composable
+fun SetColors(
+    onDismiss: () -> Unit,
+    chooseColors: (Int, Int) -> Unit,
+) {
+    val (fgColor, setFgColor) = remember { mutableStateOf(-1) }
+    val (bgColor, setBgColor) = remember { mutableStateOf(-1) }
+    val (fgExpanded, setFgExpanded) = remember { mutableStateOf(false) }
+    val (bgExpanded, setBgExpanded) = remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface {
+            Column(
+                modifier = Modifier.padding(UNIVERSAL_PADDING),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = "Text Color",
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Spacer(modifier = Modifier.padding(UNIVERSAL_PADDING))
+                ForegroundMenu(
+                    bgColor,
+                    fgExpanded, setFgExpanded, fgColor, setFgColor,
+                )
+                Spacer(modifier = Modifier.padding(UNIVERSAL_PADDING))
+                BackgroundMenu(
+                    fgColor,
+                    bgExpanded, setBgExpanded, bgColor, setBgColor,
+                )
+                Spacer(modifier = Modifier.padding(UNIVERSAL_PADDING))
+                Row {
+                    OutlinedButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                    Spacer(modifier = Modifier.padding(UNIVERSAL_PADDING))
+                    Button(
+                        onClick = {
+                            onDismiss()
+                            chooseColors(fgColor, bgColor)
+                        },
+                    ) {
+                        Text("Choose")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ForegroundMenu(
+    bgColor: Int,
+    expanded: Boolean, setExpanded: (Boolean) -> Unit,
+    color: Int, setColor: (Int) -> Unit,
+) {
+    fun fgSelection(i: Int) =
+        if (i < 0)
+            "None"
+        else
+            "${colors[i]} text ($i)"
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { setExpanded(!expanded) },
+    ) {
+        TextField(
+            value = fgSelection(color),
+            onValueChange = {},
+            readOnly = true,
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) 
+                           },
+            modifier = Modifier.menuAnchor(),
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { setExpanded(false) }) {
+            for (i in -1 until colors.size)
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = fgSelection(i),
+                            color = ircColor(i),
+                            style = TextStyle(background = ircColor(bgColor)),
+                        )
+                           },
+                    onClick = {
+                        setExpanded(false)
+                        setColor(i)
+                              },
+                )
+        }
+    }
+}
+
+@Composable
+fun BackgroundMenu(
+    fgColor: Int,
+    expanded: Boolean, setExpanded: (Boolean) -> Unit,
+    color: Int, setColor: (Int) -> Unit,
+) {
+    fun bgSelection(i: Int) =
+        if (i < 0)
+            "on default background"
+        else
+            "on ${colors[i].toIRCLower()} background ($i)"
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { setExpanded(!expanded) },
+    ) {
+        TextField(
+            value = bgSelection(color),
+            onValueChange = {},
+            enabled = fgColor >= 0,
+            readOnly = true,
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                           },
+            modifier = Modifier.menuAnchor(),
+        )
+        if (fgColor >= 0)
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { setExpanded(false) }) {
+                for (i in -1 until colors.size)
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = bgSelection(i),
+                                color = ircColor(fgColor),
+                                style = TextStyle(background = ircColor(i)),
+                            )
+                               },
+                        onClick = {
+                            setExpanded(false)
+                            setColor(i)
+                                  },
+                    )
+            }
     }
 }
 
