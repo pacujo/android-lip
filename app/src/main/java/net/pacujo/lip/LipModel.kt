@@ -13,6 +13,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.SendChannel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
@@ -170,18 +171,38 @@ class LipModel : ViewModel() {
     }
 
     private fun communicate() {
-        val connectionBridge = Channel<Connection>(0)
-        viewModelScope.launchGuarded(Dispatchers.IO) {
-            val connection = connect()
-            connectionBridge.send(connection)
-            transmitter(connection)
-        }
-        val inputBridge = Channel<String>(capacity = 100)
-        viewModelScope.launchGuarded(Dispatchers.IO) {
-            connectionBridge.receive().lineReader(inputBridge)
-        }
         viewModelScope.launchGuarded {
-            receiver(inputBridge)
+            while (true) {
+                val connectionBridge = Channel<Connection>(0)
+                val transmitJob = viewModelScope.launchGuarded(Dispatchers.IO) {
+                    val connection = connect()
+                    connectionBridge.send(connection)
+                    transmitter(connection)
+                }
+                val inputBridge = Channel<String>(capacity = 100)
+                val readerJob = viewModelScope.launchGuarded(Dispatchers.IO) {
+                    connectionBridge.receive().lineReader(inputBridge)
+                }
+                receiver(inputBridge)
+                transmitJob.cancel()
+                readerJob.cancel()
+                transmitJob.join()
+                readerJob.join()
+                val minuteInMilliseconds = 60_000L
+                val gracePeriodInMinutes = 5L
+                val gracePeriod = gracePeriodInMinutes * minuteInMilliseconds
+                displayOnConsole(
+                    timestamp = Instant.now(),
+                    line = "Backing off for ${gracePeriodInMinutes} minutes",
+                    mood = Mood.INFO,
+                )
+                delay(gracePeriod)
+                displayOnConsole(
+                    timestamp = Instant.now(),
+                    line = "Reconnect",
+                    mood = Mood.INFO,
+                )
+            }
         }
     }
 
