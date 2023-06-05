@@ -484,22 +484,23 @@ class LipModel : ViewModel() {
             return false
         val (receivers, text) = message.params
         if (text.isNotEmpty() && text[0] == CtrlA)
-            return doCTCP(text)
+            return doCTCP(message, text)
         distribute(receivers) {
             post(parts, it, text)
         }
         return true
     }
 
-    private fun doCTCP(text: String) =
+    private fun doCTCP(message: ParsedMessage, text: String) =
         when (text) {
-            "${CtrlA}VERSION${CtrlA}" -> doCTCPVersion()
+            "${CtrlA}VERSION${CtrlA}" -> doCTCPVersion(message)
 
             else -> false
         }
 
-    private fun doCTCPVersion(): Boolean {
-        command(":${CtrlA}VERSION :net.pacujo.lip 0.0.1${CtrlA}")
+    private fun doCTCPVersion(message: ParsedMessage): Boolean {
+        val version = "VERSION net.pacujo.lip 0.0.1"
+        command("NOTICE ${message.prefix} :$CtrlA$version$CtrlA")
         return true
     }
 
@@ -676,7 +677,7 @@ class LipModel : ViewModel() {
             chatInfo.value = generateChatInfo()
             state.value = AppState.JOIN
         }
-        
+
         fun join() {
             if (validChannelName(name))
                 command("JOIN $name")
