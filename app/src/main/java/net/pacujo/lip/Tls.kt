@@ -8,7 +8,6 @@ import java.nio.ByteBuffer
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLEngineResult
 
-private const val TRACE_DEBUG = false
 private val Empty = ByteBuffer.allocate(0)
 
 class TlsConnection(
@@ -58,12 +57,7 @@ class TlsConnection(
         return true
     }
 
-    override suspend fun read(buf: ByteBuffer) =
-        monitor(TRACE_DEBUG, "TlsConnection(${objId(this)}).read") {
-            __read(buf)
-        }
-
-    private suspend fun __read(buf: ByteBuffer): Int {
+    override suspend fun read(buf: ByteBuffer): Int {
         val origPos = buf.position()
         if (!inputPlain.hasRemaining()) {
             inputPlain.compact()
@@ -100,12 +94,7 @@ class TlsConnection(
         return buf.position() - origPos
     }
 
-    override suspend fun write(buf: ByteBuffer) =
-        monitor(TRACE_DEBUG, "TlsConnection(${objId(this)}).write") {
-            __write(buf)
-        }
-
-    private suspend fun __write(buf: ByteBuffer): Int {
+    override suspend fun write(buf: ByteBuffer): Int {
         val count = buf.remaining()
         var outputCapacity = 1000 + count
         mutex.withLock {
@@ -136,7 +125,7 @@ class TlsConnection(
 
     override suspend fun close() = transport.close() // TODO properly
 
-    companion object Factory {
+    companion object {
         suspend fun connect(address: SocketAddress): TlsConnection {
             val tcpConn = TcpConnection.connect(address)
             return TlsConnection(tcpConn)

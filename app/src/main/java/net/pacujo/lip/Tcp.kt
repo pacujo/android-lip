@@ -10,8 +10,6 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 
-private const val TRACE_DEBUG = false
-
 private fun <T> asyncHandler() =
     object : CompletionHandler<T, Continuation<T>> {
         override fun completed(result: T, cont: Continuation<T>) {
@@ -37,22 +35,18 @@ class TcpConnection(
         connect(InetSocketAddress(hostname, port))
 
     override suspend fun read(buf: ByteBuffer) =
-        monitor(TRACE_DEBUG, "TcpConnection(${objId(this)}).read") {
-            suspendCoroutine {
-                socket.read(buf, it, intAsyncHandler)
-            }
+        suspendCoroutine {
+            socket.read(buf, it, intAsyncHandler)
         }
 
     override suspend fun write(buf: ByteBuffer) =
-        monitor(TRACE_DEBUG, "TcpConnection(${objId(this)}).write") {
-            suspendCoroutine {
-                socket.write(buf, it, intAsyncHandler)
-            }
+        suspendCoroutine {
+            socket.write(buf, it, intAsyncHandler)
         }
 
     override suspend fun close() = socket.close()
 
-    companion object Factory {
+    companion object {
         suspend fun connect(address: SocketAddress): TcpConnection {
             val conn = TcpConnection(AsynchronousSocketChannel.open())
             conn.connect(address)
