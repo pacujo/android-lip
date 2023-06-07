@@ -23,16 +23,13 @@ private fun <T> asyncHandler() =
 private val voidAsyncHandler = asyncHandler<Void>()
 private val intAsyncHandler = asyncHandler<Int>()
 
-class TcpConnection(
+class TcpConnection private constructor(
     private val socket: AsynchronousSocketChannel,
 ) : Connection {
-    suspend fun connect(address: SocketAddress) =
+    private suspend fun connect(address: SocketAddress) =
         suspendCoroutine {
             socket.connect(address, it, voidAsyncHandler)
         }
-
-    suspend fun connect(hostname: String, port: Int) =
-        connect(InetSocketAddress(hostname, port))
 
     override suspend fun read(buf: ByteBuffer) =
         suspendCoroutine {
@@ -47,13 +44,12 @@ class TcpConnection(
     override suspend fun close() = socket.close()
 
     companion object {
-        suspend fun connect(address: SocketAddress): TcpConnection {
-            val conn = TcpConnection(AsynchronousSocketChannel.open())
-            conn.connect(address)
-            return conn
-        }
+        suspend fun connect(address: SocketAddress) =
+            TcpConnection(AsynchronousSocketChannel.open()).also {
+                it.connect(address)
+            }
 
-        suspend fun connect(hostname: String, port: Int): TcpConnection =
+        suspend fun connect(hostname: String, port: Int) =
             connect(InetSocketAddress(hostname, port))
     }
 }
