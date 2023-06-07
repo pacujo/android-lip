@@ -2,6 +2,7 @@ package net.pacujo.lip
 
 import android.util.JsonReader
 import android.util.JsonWriter
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -19,6 +20,8 @@ import java.io.File
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.time.Instant
+import java.util.Timer
+import java.util.TimerTask
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
@@ -76,6 +79,19 @@ class LipModel : ViewModel() {
         journal = LipJournal(File(filesDir, "journal"))
     }
 
+    private fun note(text: String, mood: Mood = Mood.INFO) {
+        journal.logMessage(
+            "__note__",
+            LogLine(
+                timestamp = Instant.now(),
+                from = null,
+                line = IRCString(text),
+                mood = mood,
+            )
+        )
+        logInfo(text)
+    }
+
     private fun generateChatInfo(): List<ChatStatus> {
         val result = mutableListOf(consoleStatus)
         for (chat in chats.values)
@@ -93,10 +109,10 @@ class LipModel : ViewModel() {
                     }
                 }
             } catch (e: IOException) {
-                logError("Failed to load configuration", e)
+                note("Failed to load configuration", Mood.ERROR)
                 return
             } catch (e: JsonSchemaException) {
-                logError("Invalid configuration file ignored")
+                note("Invalid configuration file ignored", Mood.ERROR)
                 return
             }
     }
@@ -124,7 +140,7 @@ class LipModel : ViewModel() {
                 configuration.value!!.emit(it)
             }
         } catch (e: IOException) {
-            logError("Cannot write $newFile", e)
+            note("Cannot write $newFile", Mood.ERROR)
             return
         }
         backupFile.delete()
@@ -140,7 +156,7 @@ class LipModel : ViewModel() {
 
     private fun command(line: String) {
         if (outputBridge.trySend(line).isFailure)
-            logWarning("Failed to issue command")
+            note("Failed to issue command", Mood.ERROR)
     }
 
     fun showConsole() {
@@ -170,26 +186,48 @@ class LipModel : ViewModel() {
                 }
     }
 
+    fun launchGuarded(
+        context: CoroutineContext = EmptyCoroutineContext,
+        start: CoroutineStart = CoroutineStart.DEFAULT,
+        block: suspend CoroutineScope.() -> Unit,
+    ) =
+        viewModelScope.launch(context, start) {
+            try {
+                viewModelScope.block()
+            } catch (e: Throwable) {
+                note("Uncaught exception: $e")
+                for (line in Log.getStackTraceString(e).split('\n'))
+                    note(line)
+                throw (e)
+            }
+        }
+
     private fun communicate() {
-        viewModelScope.launchGuarded {
+        launchGuarded {
             while (true) {
                 val connectionBridge = Channel<Connection>(0)
-                val transmitJob = viewModelScope.launchGuarded(Dispatchers.IO) {
+                val transmitJob = launchGuarded(Dispatchers.IO) {
                     val connection = connect()
                     connectionBridge.send(connection)
                     transmitter(connection)
                 }
-                val inputBridge = Channel<String>(capacity = 100)
-                val readerJob = viewModelScope.launchGuarded(Dispatchers.IO) {
-                    connectionBridge.receive().lineReader(inputBridge)
+                val inputBridge = Channel<String?>(capacity = 100)
+                val readerJob = launchGuarded(Dispatchers.IO) {
+                    lineReader(connectionBridge.receive(), inputBridge)
+                }
+                val watchDogBridge = Channel<Boolean>(capacity = 1)
+                val watchDogJob = launchGuarded {
+                    watchDog(watchDogBridge, inputBridge)
                 }
                 for (chat in chats.values)
                     chat.join()
-                receiver(inputBridge)
+                receiver(inputBridge, watchDogBridge)
                 transmitJob.cancel()
                 readerJob.cancel()
+                watchDogJob.cancel()
                 transmitJob.join()
                 readerJob.join()
+                watchDogJob.join()
                 val minuteInMilliseconds = 60_000L
                 val gracePeriodInMinutes = 5L
                 val gracePeriod = gracePeriodInMinutes * minuteInMilliseconds
@@ -208,6 +246,22 @@ class LipModel : ViewModel() {
         }
     }
 
+    private suspend fun lineReader(
+        connection: Connection,
+        bridge: SendChannel<String>,
+    ) {
+        try {
+            stringifyChunks(chunksToLines(readFlow(connection::read))).collect {
+                bridge.send(it.first)
+            }
+            connection.close()
+        } catch (e: Throwable) {
+            note("Connection broken", Mood.ERROR)
+        } finally {
+            bridge.close()
+        }
+    }
+
     private suspend fun connect() =
         with(configuration.value!!) {
             if (useTls)
@@ -223,25 +277,66 @@ class LipModel : ViewModel() {
         }
 
     private suspend fun transmitter(connection: Connection) {
-        with(configuration.value!!) {
-            connection.transmitLine("NICK $nick")
-            connection.transmitLine("USER $nick 0 * :$name")
+        try {
+            with(configuration.value!!) {
+                connection.transmitLine("NICK $nick")
+                connection.transmitLine("USER $nick 0 * :$name")
+            }
+            while (true)
+                connection.transmitLine(outputBridge.receive())
+        } catch (e: IOException) {
+            note("Transmitter died", Mood.ERROR)
         }
-        while (true)
-            connection.transmitLine(outputBridge.receive())
     }
 
-    private suspend fun receiver(inputBridge: ReceiveChannel<String>) {
+    private suspend fun watchDog(
+        watchDogBridge: Channel<Boolean>,
+        inputBridge: SendChannel<String?>,
+    ) {
+        val second = 1_000L
+        val minute = 60 * second
+
+        val timer = Timer(true)
+        lateinit var timeout: TimerTask
+
+        fun schedule(delay: Long) =
+            object : TimerTask() {
+                override fun run() {
+                    watchDogBridge.trySend(false)
+                }
+            }.also {
+                timer.schedule(it, delay)
+            }
+
+        while (true) {
+            timeout = schedule(5 * minute)
+            if (!watchDogBridge.receive()) {
+                command("PING :hi")
+                timeout = schedule(10 * second)
+                if (!watchDogBridge.receive())
+                    break
+            }
+            timeout.cancel()
+        }
+        inputBridge.send(null)
+    }
+
+    private suspend fun receiver(
+        inputBridge: ReceiveChannel<String?>,
+        watchDogBridge: SendChannel<Boolean>,
+    ) {
         try {
+            outer@
             while (true) {
-                var line = inputBridge.receive()
+                var line = inputBridge.receive() ?: break@outer
                 val now = Instant.now()
+                watchDogBridge.trySend(true)
                 while (true) {
                     actOnLine(now, line)
                     val result = inputBridge.tryReceive()
                     if (result.isFailure)
                         break
-                    line = result.getOrThrow()
+                    line = result.getOrThrow() ?: break@outer
                 }
             }
         } catch (e: ClosedReceiveChannelException) {
@@ -251,6 +346,11 @@ class LipModel : ViewModel() {
                 mood = Mood.ERROR,
             )
         }
+        displayOnConsole(
+            timestamp = Instant.now(),
+            line = "Server unresponsive",
+            mood = Mood.ERROR,
+        )
     }
 
     private fun actOnLine(timestamp: Instant, line: String) {
@@ -258,13 +358,19 @@ class LipModel : ViewModel() {
         val (cmd, rest) = parseCommand(tail)
         if (cmd == null) {
             val repr = line.repr()
-            logWarning("Incomprehensible input from server: \"$repr\"")
+            note(
+                "Incomprehensible input from server: \"$repr\"",
+                Mood.ERROR,
+            )
             return
         }
         val params = parseParams(rest)
         if (params == null) {
             val repr = line.repr()
-            logWarning("Illegal command parameters from server: \"$repr\"")
+            note(
+                "Illegal command parameters from server: \"$repr\"",
+                Mood.ERROR,
+            )
             return
         }
         val message = ParsedMessage(timestamp, prefix, cmd, params)
@@ -287,6 +393,7 @@ class LipModel : ViewModel() {
             "NOTICE" -> noticeIndication(message)
             "PART" -> partIndication(message)
             "PING" -> pingIndication(message)
+            "PONG" -> true
             "PRIVMSG" -> privMsgIndication(message)
             else -> false
         }
@@ -467,8 +574,8 @@ class LipModel : ViewModel() {
             }
 
             2 -> {
-                val (s1, s2) = message.params
-                command("PONG $s1 :$s2")
+                val (s1, _) = message.params
+                command("PONG :$s1")
                 true
             }
 
@@ -555,7 +662,7 @@ class LipModel : ViewModel() {
         override fun toString() = "Chat(\"$name\", \"$key\")"
 
         init {
-            viewModelScope.launchGuarded {
+            launchGuarded {
                 val buffer = journal.replay(name)
                 join()
                 var count = 0L
@@ -640,10 +747,10 @@ class LipModel : ViewModel() {
         fun clear() {
             check(state.value == AppState.CHAT)
             state.value = AppState.CLEARING
-            val expungeJob = viewModelScope.launchGuarded(Dispatchers.IO) {
+            val expungeJob = launchGuarded(Dispatchers.IO) {
                 journal.expunge(key)
             }
-            viewModelScope.launchGuarded {
+            launchGuarded {
                 expungeJob.join()
                 chats[key] = Chat(name, key)
                 chatInfo.value = generateChatInfo()
@@ -656,10 +763,10 @@ class LipModel : ViewModel() {
             state.value = AppState.DELETING
             if (validChannelName(name))
                 command("PART $name")
-            val expungeJob = viewModelScope.launchGuarded(Dispatchers.IO) {
+            val expungeJob = launchGuarded(Dispatchers.IO) {
                 journal.expunge(key)
             }
-            viewModelScope.launchGuarded {
+            launchGuarded {
                 expungeJob.join()
                 removeFromAutojoins()
                 chats.remove(key)
@@ -752,20 +859,6 @@ private fun Char.toIRCLower() =
 fun String.toIRCLower() =
     map { it.toIRCLower() }.toCharArray().concatToString()
 
-private suspend fun Connection.lineReader(
-    bridge: SendChannel<String>,
-) {
-    try {
-        stringifyChunks(chunksToLines(readFlow(this::read))).collect {
-            bridge.send(it.first)
-        }
-        close()
-    } catch (e: Throwable) {
-        logError("Connection broken", e)
-    } finally {
-        bridge.close()
-    }
-}
 private suspend fun Connection.transmitLine(line: String) =
     transmit("$line\r\n")
 
@@ -776,20 +869,6 @@ private suspend fun Connection.transmit(snippet: String) {
     if (!success)
         throw IOException("writeAll failure")
 }
-
-fun CoroutineScope.launchGuarded(
-    context: CoroutineContext = EmptyCoroutineContext,
-    start: CoroutineStart = CoroutineStart.DEFAULT,
-    block: suspend CoroutineScope.() -> Unit,
-) =
-    this.launch(context, start) {
-        try {
-            block()
-        } catch (e: Throwable) {
-            logError("Uncaught exception", e)
-            throw (e)
-        }
-    }
 
 fun validNick(nick: String): Boolean {
     if (nick.isEmpty())
