@@ -2,6 +2,7 @@ package net.pacujo.lip
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.SocketAddress
 import java.nio.ByteBuffer
@@ -10,12 +11,14 @@ import javax.net.ssl.SSLEngineResult
 
 private val Empty = ByteBuffer.allocate(0)
 
-class TlsConnection(
+class TlsConnection private constructor(
     private val transport: Connection,
     clientMode: Boolean = true,
 ) : Connection {
     private val engine = SSLContext.getDefault().createSSLEngine()
     private val mutex = Mutex()
+    private val rxMutex = Mutex()
+    private val txMutex = Mutex()
     private val inputWire = ByteBuffer.allocate(10000)
     private val inputPlain = ByteBuffer.allocate(10000)
 
@@ -29,8 +32,13 @@ class TlsConnection(
         while (true)
             when (engine.handshakeStatus) {
                 SSLEngineResult.HandshakeStatus.NEED_UNWRAP -> {
+                    if (rxMutex.isLocked) {
+                        mutex.withoutLock { rxMutex.withLock {} }
+                        continue
+                    }
                     while (true) {
                         val remaining = inputWire.remaining()
+                        @Suppress("BlockingMethodInNonBlockingContext")
                         engine.unwrap(inputWire, Empty)
                         if (remaining != inputWire.remaining())
                             break
@@ -44,7 +52,12 @@ class TlsConnection(
                 }
 
                 SSLEngineResult.HandshakeStatus.NEED_WRAP -> {
+                    if (txMutex.isLocked) {
+                        mutex.withoutLock { txMutex.withLock {} }
+                        continue
+                    }
                     val outputWire = ByteBuffer.allocate(10000)
+                    @Suppress("BlockingMethodInNonBlockingContext")
                     engine.wrap(Empty, outputWire)
                     outputWire.flip()
                     writeAll(outputWire, transport::write)
@@ -52,7 +65,12 @@ class TlsConnection(
 
                 SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING -> break
 
-                else -> check(false)
+                else -> {
+                    val status = engine.handshakeStatus
+                    throw IOException(
+                        "Unexpected TLS handshake status: $status",
+                    )
+                }
             }
         return true
     }
@@ -73,15 +91,21 @@ class TlsConnection(
 
                         SSLEngineResult.Status.BUFFER_UNDERFLOW -> {
                             inputWire.compact()
-                            val count = mutex.withoutLock {
-                                transport.read(inputWire)
+                            val count = rxMutex.withLock {
+                                mutex.withoutLock {
+                                    transport.read(inputWire)
+                                }
                             }
                             inputWire.flip()
                             if (count < 0) // dirty EOF
                                 return -1
                         }
 
-                        else -> break
+                        SSLEngineResult.Status.BUFFER_OVERFLOW ->
+                            throw IOException("TLS unwrap overflow")
+
+                        else ->
+                            return -1
                     }
                 }
             }
@@ -98,40 +122,46 @@ class TlsConnection(
         val count = buf.remaining()
         var outputCapacity = 1000 + count
         mutex.withLock {
-            while (true) {
+            while (buf.remaining() == count) {
+                if (!handshake())
+                    return -1
                 val outputWire = ByteBuffer.allocate(outputCapacity)
                 val result = engine.wrap(buf, outputWire)
                 when (result.status) {
                     SSLEngineResult.Status.OK -> {
                         outputWire.flip()
-                        mutex.withoutLock {
-                            if (!writeAll(outputWire, transport::write))
-                                return -1
+                        txMutex.withLock {
+                            mutex.withoutLock {
+                                if (!writeAll(outputWire, transport::write))
+                                    return -1
+                            }
                         }
-                        if (!handshake())
-                            return -1
-                        if (!buf.hasRemaining())
-                            return count
                     }
 
                     SSLEngineResult.Status.BUFFER_OVERFLOW ->
                         outputCapacity *= 2
 
-                    else -> check(false)
+                    SSLEngineResult.Status.BUFFER_UNDERFLOW ->
+                        throw IOException("TLS wrap underflow")
+
+                    else ->
+                        return -1
                 }
             }
         }
+        return count - buf.remaining()
     }
 
     override suspend fun close() = transport.close() // TODO properly
 
     companion object {
+        @Suppress("MemberVisibilityCanBePrivate")
         suspend fun connect(address: SocketAddress): TlsConnection {
             val tcpConn = TcpConnection.connect(address)
-            return TlsConnection(tcpConn)
+            return TlsConnection(tcpConn, true)
         }
 
-        suspend fun connect(hostname: String, port: Int): TlsConnection =
+        suspend fun connect(hostname: String, port: Int) =
             connect(InetSocketAddress(hostname, port))
     }
 }
